@@ -3,6 +3,8 @@ import torch
 # 硬體與路徑 (保持不變)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 NPZ_PATH = "turing_patterns_dataset_merged.npz"
+
+# verify要使用，train部分要改下面的
 MODEL_SAVE_PATH = "MLP_PINN.pth" # 檔名會由 train.py 動態修改
 
 # 物理參數 (保持不變)
@@ -14,7 +16,7 @@ S_DIFFUSION = 0.4
 BATCH_SIZE = 32
 EPOCHS = 100
 LEARNING_RATE = 1e-4 # MLP 可能需要小一點的 LR
-LOSS_WEIGHTS = torch.tensor([1.0, 5.0, 0.0, 5.0]).to(DEVICE)
+LOSS_WEIGHTS = torch.tensor([1.0, 5.0, 1.0, 5.0]).to(DEVICE)
 LAMBDA_PHY = 0.1
 
 # ==========================================
@@ -22,11 +24,13 @@ LAMBDA_PHY = 0.1
 # ==========================================
 
 # 1. 選擇模型架構: "CNN" 或 "MLP"
-MODEL_TYPE = "MLP" 
+MODEL_TYPE = "CNN" 
 
 # 2. 是否使用 PINN (物理 Loss): True 或 False
-USE_PHYSICS = False
+USE_PHYSICS = True
 
 # 自動生成 WandB 專案名稱 (不用改)
 WANDB_PROJECT = "Turing-Pattern-Comparison"
-WANDB_RUN_NAME = f"{MODEL_TYPE}_{'PINN' if USE_PHYSICS else 'PureData'}"
+
+#train name 改這裡
+WANDB_RUN_NAME = f"{MODEL_TYPE}_{'PINN' if USE_PHYSICS else 'PureData'}_20000"

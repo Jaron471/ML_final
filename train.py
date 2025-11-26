@@ -1,5 +1,6 @@
 import os
 import sys
+import random
 
 # 1. 環境設定
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -19,14 +20,38 @@ from model.dataset import TuringDataset
 from model.model import ParameterNet, MLPNet # <--- 引入 MLPNet
 from model.loss import PhysicsLoss
 
+def set_seed(seed=42):
+    """固定所有隨機因素，確保實驗可重現"""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed) # 如果有多張 GPU
+    
+    # 確保卷積算法是確定性的 (會稍微降低效能，但保證結果一致)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    print(f"🔒 Random seed set to {seed}")
+
 def main():
     # --- WandB 初始化 ---
     wandb.login(key="d969eaa6886920a565de70b8ca7ce8c9b13f6ddf")
+    set_seed(42)
+
+    generator = torch.Generator().manual_seed(42)
     
     # 根據設定動態調整儲存檔名
-    save_name = f"{config.MODEL_TYPE}_{'PINN' if config.USE_PHYSICS else 'Pure'}.pth"
+    ckpt_dir = "checkpoint"
+    if not os.path.exists(ckpt_dir):
+        os.makedirs(ckpt_dir)
+        print(f"📂 Created directory: {ckpt_dir}")
+
+    # 設定完整的儲存路徑
+    filename = f"{config.MODEL_TYPE}_{'PINN' if config.USE_PHYSICS else 'Pure'}.pth"
+    save_path = os.path.join(ckpt_dir, filename)
+    
     print(f"🧪 Experiment: {config.WANDB_RUN_NAME}")
-    print(f"📂 Model will be saved to: {save_name}")
+    print(f"💾 Model will be saved to: {save_path}")
 
     wandb.init(
         project=config.WANDB_PROJECT,
@@ -45,7 +70,11 @@ def main():
     
     train_size = int(0.8 * len(dataset))
     val_size = len(dataset) - train_size
-    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+    train_dataset, val_dataset = random_split(
+        dataset, 
+        [train_size, val_size], 
+        generator=generator  
+    )
     
     train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=config.BATCH_SIZE, shuffle=False)
@@ -119,7 +148,9 @@ def main():
         wandb.log(log_dict)
         print(f"Epoch {epoch+1}: Val NRMSE(δ)={val_metrics['nrmse_delta']:.2%}")
 
-    torch.save(model.state_dict(), save_name)
+    torch.save(model.state_dict(), save_path)
+    wandb.save(save_path)
+    print(f"✅ Model saved to {save_path}")
     wandb.finish()
 
 def validate_with_nrmse(model, loader, scaler):
