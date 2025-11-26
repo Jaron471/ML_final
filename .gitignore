@@ -1,0 +1,8 @@
+*.npz
+*.pth
+
+wawndb/
+__pycache__/
+checkpoints/
+
+
