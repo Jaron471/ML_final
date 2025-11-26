@@ -1,7 +1,7 @@
 *.npz
 *.pth
 
-wawndb/
+wandb/
 __pycache__/
 checkpoints/
 
