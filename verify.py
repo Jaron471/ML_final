@@ -12,30 +12,45 @@ import torch
 from torch.utils.data import DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.metrics import r2_score, mean_absolute_error
+from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 from tqdm import tqdm
 
 # 引用你的模組
 from model import config
 from model.dataset import TuringDataset
-from model.model import ParameterNet
-
-# 如果你有 GPU 模擬程式碼，可以嘗試 import 進來做「物理重生成」驗證
-# from GPU_generate import simulate_gm_cupy 
+# --- 修改這裡：同時引入 MLPNet ---
+from model.model import ParameterNet, MLPNet 
 
 def verify():
-    # 1. 載入模型與資料
+    # 1. 載入資料
     print(f"Loading model from {config.MODEL_SAVE_PATH}...")
     dataset = TuringDataset(config.NPZ_PATH)
     
-    # 為了驗證，我們通常看整個資料集，或者你可以只看沒參與訓練的後 20%
-    # 這裡我們為了展示方便，隨機取樣 1000 筆資料來驗證
+    # 隨機取樣 1000 筆資料來驗證
     indices = np.random.choice(len(dataset), size=min(len(dataset), 1000), replace=False)
     subset = torch.utils.data.Subset(dataset, indices)
     loader = DataLoader(subset, batch_size=config.BATCH_SIZE, shuffle=False)
     
-    model = ParameterNet().to(config.DEVICE)
-    model.load_state_dict(torch.load(config.MODEL_SAVE_PATH))
+    # --- 修改這裡：根據 Config 選擇模型架構 ---
+    print(f"Using Model Architecture: {config.MODEL_TYPE}")
+    if config.MODEL_TYPE == "CNN":
+        model = ParameterNet().to(config.DEVICE)
+    elif config.MODEL_TYPE == "MLP":
+        model = MLPNet().to(config.DEVICE)
+    else:
+        raise ValueError(f"Unknown MODEL_TYPE: {config.MODEL_TYPE}")
+    # ----------------------------------------
+
+    # 載入訓練好的權重
+    # 注意：如果權重檔名有變 (例如 MLP_PINN.pth)，請確保 config.MODEL_SAVE_PATH 指向正確檔案
+    # 或者手動指定路徑: model.load_state_dict(torch.load("MLP_PINN.pth"))
+    try:
+        model.load_state_dict(torch.load(config.MODEL_SAVE_PATH))
+    except FileNotFoundError:
+        print(f"❌ 找不到權重檔: {config.MODEL_SAVE_PATH}")
+        print("請確認 config.MODEL_TYPE 是否與訓練時一致，或手動修改路徑。")
+        return
+
     model.eval()
     
     # 2. 進行預測
@@ -51,11 +66,10 @@ def verify():
             preds_norm = model(u_batch)
             
             # 反正規化回真實數值
-            # 注意：dataset.scaler 需要先 to_device 才能處理 Tensor，或者我們取出 scaler 自己算
             preds_norm = preds_norm.cpu().numpy()
             targets_norm = params_target.numpy()
             
-            # 手動反正規化 (使用 dataset.scaler 的 numpy 功能)
+            # 手動反正規化
             preds_real = dataset.scaler.inverse_transform_numpy(preds_norm)
             targets_real = dataset.scaler.inverse_transform_numpy(targets_norm)
             
@@ -65,11 +79,15 @@ def verify():
     all_preds = np.concatenate(all_preds, axis=0)
     all_targets = np.concatenate(all_targets, axis=0)
     
-    # 3. 數值評估 (Metrics)
+    # 3. 數值評估 (Metrics: R2, MAE, NRMSE)
     param_names = ['a', 'b', 'c', 'delta']
-    print("\n" + "="*40)
-    print("   Evaluation Metrics (R2 & MAE)")
-    print("="*40)
+    print("\n" + "="*55)
+    print(f"   Evaluation Metrics ({config.MODEL_TYPE})")
+    print("="*55)
+    print(f"{'Metric':<10} | {'a':<10} | {'b':<10} | {'c':<10} | {'delta':<10}")
+    print("-" * 60)
+    
+    metrics = {'R2': [], 'MAE': [], 'NRMSE': []}
     
     for i, name in enumerate(param_names):
         y_true = all_targets[:, i]
@@ -78,26 +96,27 @@ def verify():
         r2 = r2_score(y_true, y_pred)
         mae = mean_absolute_error(y_true, y_pred)
         
-        # 計算相對誤差百分比 (MAPE)
-        mape = np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+        # 計算 NRMSE
+        rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+        data_range = np.max(y_true) - np.min(y_true)
+        nrmse = (rmse / data_range) if data_range != 0 else 0.0
         
-        print(f"Parameter {name}:")
-        print(f"  R2 Score : {r2:.4f} (越接近 1 越好)")
-        print(f"  MAE      : {mae:.4f}")
-        print(f"  MAPE     : {mape:.2f}%")
-        print("-" * 20)
+        metrics['R2'].append(r2)
+        metrics['MAE'].append(mae)
+        metrics['NRMSE'].append(nrmse)
+
+    # 顯示表格
+    for name, vals in metrics.items():
+        if name == 'NRMSE':
+            row_str = f"{name:<10} | {vals[0]:.2%}   | {vals[1]:.2%}   | {vals[2]:.2%}   | {vals[3]:.2%}"
+        else:
+            row_str = f"{name:<10} | {vals[0]:.4f}   | {vals[1]:.4f}   | {vals[2]:.4f}   | {vals[3]:.4f}"
+        print(row_str)
+        
+    print("="*60)
 
     # 4. 繪製散點圖 (Scatter Plots)
     plot_scatter(all_targets, all_preds, param_names)
-    
-    # 5. 找出預測最好與最差的案例 (Optional)
-    # 計算每個樣本的平均相對誤差
-    errors = np.mean(np.abs(all_targets - all_preds) / all_targets, axis=1)
-    best_idx = np.argmin(errors)
-    worst_idx = np.argmax(errors)
-    
-    print(f"\nBest Prediction Index: {best_idx}, Error: {errors[best_idx]:.4f}")
-    print(f"Worst Prediction Index: {worst_idx}, Error: {errors[worst_idx]:.4f}")
 
 def plot_scatter(y_true, y_pred, param_names):
     """
@@ -107,10 +126,8 @@ def plot_scatter(y_true, y_pred, param_names):
     axes = axes.flatten()
     
     for i, ax in enumerate(axes):
-        # 繪製散點
         ax.scatter(y_true[:, i], y_pred[:, i], alpha=0.5, s=10, c='blue', label='Samples')
         
-        # 繪製理想對角線 (y=x)
         lims = [
             np.min([ax.get_xlim(), ax.get_ylim()]),
             np.max([ax.get_xlim(), ax.get_ylim()]),
@@ -124,8 +141,9 @@ def plot_scatter(y_true, y_pred, param_names):
         ax.grid(True, alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig("verification_scatter_plots.png")
-    print("\n✅ Scatter plots saved to 'verification_scatter_plots.png'")
+    filename = f"verify_{config.MODEL_TYPE}.png"
+    plt.savefig(filename)
+    print(f"\n✅ Scatter plots saved to '{filename}'")
     plt.show()
 
 if __name__ == "__main__":
