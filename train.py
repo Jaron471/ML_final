@@ -47,11 +47,14 @@ def main():
         print(f"📂 Created directory: {ckpt_dir}")
 
     # 設定完整的儲存路徑
-    filename = f"{config.MODEL_TYPE}_{'PINN' if config.USE_PHYSICS else 'Pure'}.pth"
+    filename = f"{config.MODEL_TYPE}_{'PINN' if config.USE_PHYSICS else 'Pure'}_newloss_{config.LOSS_TYPE}.pth"
     save_path = os.path.join(ckpt_dir, filename)
     
     print(f"🧪 Experiment: {config.WANDB_RUN_NAME}")
     print(f"💾 Model will be saved to: {save_path}")
+
+    print(f"🚀 Start Training using [{config.LOSS_TYPE}] Loss...")
+    print(f"   Weights: {config.LOSS_WEIGHTS.cpu().numpy()}")
 
     wandb.init(
         project=config.WANDB_PROJECT,
@@ -86,9 +89,17 @@ def main():
         model = MLPNet().to(config.DEVICE)
     else:
         raise ValueError("Unknown MODEL_TYPE in config")
-        
+
     optimizer = optim.Adam(model.parameters(), lr=config.LEARNING_RATE)
     wandb.watch(model, log="all", log_freq=10)
+
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, 
+        mode=config.SCHEDULER_MODE, 
+        factor=config.SCHEDULER_FACTOR, 
+        patience=config.SCHEDULER_PATIENCE, 
+        verbose=config.SCHEDULER_VERBOSE
+    )
 
     # Physics Loss (如果不用 Physics，這個物件還是可以建，只是不 call)
     criterion_physics = PhysicsLoss().to(config.DEVICE)
@@ -112,8 +123,19 @@ def main():
             params_pred_norm = model(u_batch)
             
             # --- Data Loss (MSE) ---
-            diff = (params_pred_norm - params_target) ** 2
-            loss_data = torch.mean(config.LOSS_WEIGHTS * diff)
+            if config.LOSS_TYPE == "MSE":
+                # MSE = (pred - target)^2
+                raw_diff = (params_pred_norm - params_target) ** 2
+                
+            elif config.LOSS_TYPE == "L1":
+                # L1 = |pred - target|
+                raw_diff = torch.abs(params_pred_norm - params_target)
+            else:
+                raise ValueError(f"❌ Unknown LOSS_TYPE: {config.LOSS_TYPE}")
+            
+
+            weighted_diff = raw_diff * config.LOSS_WEIGHTS
+            loss_data = torch.mean(weighted_diff)
             
             # --- Physics Loss (條件執行) ---
             loss_phy = torch.tensor(0.0).to(config.DEVICE)
@@ -128,6 +150,9 @@ def main():
                 loss = loss_data
             
             loss.backward()
+
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            
             optimizer.step()
             
             total_data_loss += loss_data.item()
@@ -138,15 +163,25 @@ def main():
         # --- 驗證與 Log ---
         val_metrics, _ = validate_with_nrmse(model, val_loader, dataset.scaler)
         
+        current_val_loss = val_metrics['nrmse_avg']
+        scheduler.step(current_val_loss)
+
+        current_lr = optimizer.param_groups[0]['lr']
         log_dict = {
             "epoch": epoch + 1,
             "train/data_loss": total_data_loss / len(train_loader),
             "train/phy_loss": total_phy_loss / len(train_loader), # 如果沒開，這裡會是 0
             "val/nrmse_delta": val_metrics['nrmse_delta'],
-            "val/nrmse_avg": val_metrics['nrmse_avg']
+            "val/nrmse_avg": val_metrics['nrmse_avg'],
+            "train/learning_rate": current_lr
         }
         wandb.log(log_dict)
-        print(f"Epoch {epoch+1}: Val NRMSE(δ)={val_metrics['nrmse_delta']:.2%}")
+        print(f"Epoch {epoch+1}: "
+              f"NRMSE [a={val_metrics['nrmse_a']:.2%} | "
+              f"b={val_metrics['nrmse_b']:.2%} | "
+              f"c={val_metrics['nrmse_c']:.2%} | "
+              f"δ={val_metrics['nrmse_delta']:.2%}] "
+              f"(Avg={val_metrics['nrmse_avg']:.2%})")
 
     torch.save(model.state_dict(), save_path)
     wandb.save(save_path)
