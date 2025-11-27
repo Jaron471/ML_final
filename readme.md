@@ -16,7 +16,7 @@
     *   **功能**：讀取 CSV 中的參數，利用數值方法 (Finite Difference + FFT) 解 GM 方程。
     *   **版本**：
         *   `gm_cupy.py`: 基於 **CuPy** (NVIDIA GPU) 的高效能版本。
-        *   `gm_mps.py`: 針對 **Mac M1/M2/M3 (MPS)** 加速的版本。
+        *   `gm_mps.py`: 針對 **Mac GPU (MPS)** 加速的版本。
     *   **產出**：`.npz` 檔案 (包含圖像 $u, v$ 和對應參數)。
 
 *   **`merge.py` (數據整理)**
