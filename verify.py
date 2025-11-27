@@ -16,38 +16,38 @@ from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 from tqdm import tqdm
 
 # 引用你的模組
-from model import config
+from model import config_new
 from model.dataset import TuringDataset
 # --- 修改這裡：同時引入 MLPNet ---
 from model.model import ParameterNet, MLPNet 
 
 def verify():
     # 1. 載入資料
-    print(f"Loading model from {config.MODEL_SAVE_PATH}...")
-    dataset = TuringDataset(config.NPZ_PATH)
+    print(f"Loading model from {config_new.MODEL_SAVE_PATH}...")
+    dataset = TuringDataset(config_new.NPZ_PATH)
     
     # 隨機取樣 1000 筆資料來驗證
     indices = np.random.choice(len(dataset), size=min(len(dataset), 1000), replace=False)
     subset = torch.utils.data.Subset(dataset, indices)
-    loader = DataLoader(subset, batch_size=config.BATCH_SIZE, shuffle=False)
+    loader = DataLoader(subset, batch_size=config_new.BATCH_SIZE, shuffle=False)
     
     # --- 修改這裡：根據 Config 選擇模型架構 ---
-    print(f"Using Model Architecture: {config.MODEL_TYPE}")
-    if config.MODEL_TYPE == "CNN":
-        model = ParameterNet().to(config.DEVICE)
-    elif config.MODEL_TYPE == "MLP":
-        model = MLPNet().to(config.DEVICE)
+    print(f"Using Model Architecture: {config_new.MODEL_TYPE}")
+    if config_new.MODEL_TYPE == "CNN":
+        model = ParameterNet().to(config_new.DEVICE)
+    elif config_new.MODEL_TYPE == "MLP":
+        model = MLPNet().to(config_new.DEVICE)
     else:
-        raise ValueError(f"Unknown MODEL_TYPE: {config.MODEL_TYPE}")
+        raise ValueError(f"Unknown MODEL_TYPE: {config_new.MODEL_TYPE}")
     # ----------------------------------------
 
     # 載入訓練好的權重
     # 注意：如果權重檔名有變 (例如 MLP_PINN.pth)，請確保 config.MODEL_SAVE_PATH 指向正確檔案
     # 或者手動指定路徑: model.load_state_dict(torch.load("MLP_PINN.pth"))
     try:
-        model.load_state_dict(torch.load("checkpoint/" + config.MODEL_SAVE_PATH))
+        model.load_state_dict(torch.load("checkpoint/" + config_new.MODEL_SAVE_PATH))
     except FileNotFoundError:
-        print(f"❌ 找不到權重檔: {config.MODEL_SAVE_PATH}")
+        print(f"❌ 找不到權重檔: {config_new.MODEL_SAVE_PATH}")
         print("請確認 config.MODEL_TYPE 是否與訓練時一致，或手動修改路徑。")
         return
 
@@ -60,7 +60,7 @@ def verify():
     print("Running inference...")
     with torch.no_grad():
         for u_batch, _, params_target in tqdm(loader):
-            u_batch = u_batch.to(config.DEVICE)
+            u_batch = u_batch.to(config_new.DEVICE)
             
             # 預測 (正規化後的)
             preds_norm = model(u_batch)
@@ -82,7 +82,7 @@ def verify():
     # 3. 數值評估 (Metrics: R2, MAE, NRMSE)
     param_names = ['a', 'b', 'c', 'delta']
     print("\n" + "="*55)
-    print(f"   Evaluation Metrics ({config.MODEL_TYPE})")
+    print(f"   Evaluation Metrics ({config_new.MODEL_TYPE})")
     print("="*55)
     print(f"{'Metric':<10} | {'a':<10} | {'b':<10} | {'c':<10} | {'delta':<10}")
     print("-" * 60)
@@ -141,7 +141,7 @@ def plot_scatter(y_true, y_pred, param_names):
         ax.grid(True, alpha=0.3)
     
     plt.tight_layout()
-    filename = f"verify_{config.MODEL_TYPE}.png"
+    filename = f"verify_{config_new.MODEL_TYPE}.png"
     plt.savefig(filename)
     print(f"\n✅ Scatter plots saved to '{filename}'")
     plt.show()

@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 
 # 引用你的模組
-from model import config
+from model import config_new
 from model.dataset import TuringDataset
 from model.model import ParameterNet
 
@@ -34,12 +34,12 @@ except ImportError:
 def visual_validation():
     # 1. 載入模型
     print("Loading model...")
-    model = ParameterNet().to(config.DEVICE)
-    model.load_state_dict(torch.load("checkpoint/" + config.MODEL_SAVE_PATH))
+    model = ParameterNet().to(config_new.DEVICE)
+    model.load_state_dict(torch.load("checkpoint/" + config_new.MODEL_SAVE_PATH))
     model.eval()
     
     # 2. 載入數據 (隨機取 3 筆)
-    dataset = TuringDataset(config.NPZ_PATH)
+    dataset = TuringDataset(config_new.NPZ_PATH)
     indices = np.random.choice(len(dataset), size=3, replace=False)
     
     # 3. 準備畫布
@@ -57,7 +57,7 @@ def visual_validation():
         params_true = dataset.scaler.inverse_transform_numpy(params_norm)
         
         # --- 模型預測 ---
-        u_input = torch.tensor(u_tensor).unsqueeze(0).to(config.DEVICE) # (1, 1, 128, 128)
+        u_input = torch.tensor(u_tensor).unsqueeze(0).to(config_new.DEVICE) # (1, 1, 128, 128)
         with torch.no_grad():
             pred_norm = model(u_input).cpu().numpy()[0]
         
