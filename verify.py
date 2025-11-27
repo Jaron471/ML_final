@@ -45,7 +45,7 @@ def verify():
     # 注意：如果權重檔名有變 (例如 MLP_PINN.pth)，請確保 config.MODEL_SAVE_PATH 指向正確檔案
     # 或者手動指定路徑: model.load_state_dict(torch.load("MLP_PINN.pth"))
     try:
-        model.load_state_dict(torch.load(config.MODEL_SAVE_PATH))
+        model.load_state_dict(torch.load("checkpoint/" + config.MODEL_SAVE_PATH))
     except FileNotFoundError:
         print(f"❌ 找不到權重檔: {config.MODEL_SAVE_PATH}")
         print("請確認 config.MODEL_TYPE 是否與訓練時一致，或手動修改路徑。")

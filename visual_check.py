@@ -19,15 +19,23 @@ from model import config
 from model.dataset import TuringDataset
 from model.model import ParameterNet
 
-# 引入 GPU 模擬器 (假設你在根目錄有這個檔案)
-# 注意：你需要確保 run_one_row 或 simulate_gm_cupy 可以被 import
-from GM_new import simulate_gm_cupy, calculate_gierer_meinhardt_steady_state
+# 引入 GPU 模擬器 (自動偵測 CuPy 或 MPS)
+try:
+    from gm_cupy import simulate_gm_cupy as simulate_gm, calculate_gierer_meinhardt_steady_state
+    print("✅ Using CuPy (NVIDIA GPU) for re-simulation.")
+except ImportError:
+    try:
+        from gm_mps import simulate_gm_mps as simulate_gm, calculate_gierer_meinhardt_steady_state
+        print("✅ Using MPS (Apple Silicon) for re-simulation.")
+    except ImportError:
+        print("❌ Could not import simulation engine (gm_cupy or gm_mps).")
+        sys.exit(1)
 
 def visual_validation():
     # 1. 載入模型
     print("Loading model...")
     model = ParameterNet().to(config.DEVICE)
-    model.load_state_dict(torch.load(config.MODEL_SAVE_PATH))
+    model.load_state_dict(torch.load("checkpoint/" + config.MODEL_SAVE_PATH))
     model.eval()
     
     # 2. 載入數據 (隨機取 3 筆)
@@ -71,9 +79,9 @@ def visual_validation():
         
         if u_star is not None:
             # 呼叫模擬器 (ID 設為 0, seed 設為固定值以便比較)
-            # 注意：這裡假設你的 simulate_gm_cupy 接口如下，如果不同請自行調整
+            # 注意：這裡假設你的 simulate_gm 接口如下，如果不同請自行調整
             try:
-                u_res, _, _ = simulate_gm_cupy(
+                u_res, _, _ = simulate_gm(
                     id=0, a=p_a, b=p_b, c=p_c, delta=p_d,
                     u_star=u_star, v_star=v_star,
                     seed=42 # 固定種子看結構
