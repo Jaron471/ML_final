@@ -4,7 +4,7 @@ import os
 # ==========================================
 # 1. 硬體與路徑設定
 # ==========================================
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
 
 # 指向你合併後的大數據集 (確保這檔案在根目錄)
 NPZ_PATH = "turing_patterns_dataset_merged.npz"
@@ -24,6 +24,7 @@ S_DIFFUSION = 0.4
 # ==========================================
 BATCH_SIZE = 32        # 如果顯存(VRAM) > 8GB，建議改為 64 以加快 Surrogate 訓練
 EPOCHS = 100           # Phase 2 & 3 的總訓練輪數
+TRAIN_VAL_RATIO = 0.8  # 訓練集比例 (0.8 = 80%訓練, 20%驗證)
 
 # 學習率設定
 # Phase 1 (Surrogate) 通常用 1e-3 (在 new_train.py 內寫死)
@@ -43,9 +44,5 @@ LOSS_WEIGHTS = torch.tensor([1.0, 5.0, 1.0, 5.0]).to(DEVICE)
 # ==========================================
 # 5. 其他設定 (WandB / 舊版相容)
 # ==========================================
-WANDB_PROJECT = "Turing-Pattern-Comparison"
+WANDB_PROJECT = "Turing-Pattern-Surrogate"
 WANDB_RUN_NAME = "Hybrid_Cycle_Run"
-
-# (以下是給舊版 train.py 用的，new_train.py 暫時用不到，但保留無妨)
-LAMBDA_PHY = 0.1
-LOSS_TYPE = "L1"

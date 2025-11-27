@@ -1,13 +1,12 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from . import config_new
 
 class PhysicsLoss(nn.Module):
-    def __init__(self):
+    def __init__(self, dx=1.0, s_diffusion=0.4):
         super(PhysicsLoss, self).__init__()
-        self.dx = config_new.DX
-        self.s = config_new.S_DIFFUSION
+        self.dx = dx
+        self.s = s_diffusion
         
         # 定義拉普拉斯算子卷積核 (Finite Difference Laplacian)
         # [[0, 1, 0], [1, -4, 1], [0, 1, 0]]

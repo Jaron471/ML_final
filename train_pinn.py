@@ -15,7 +15,7 @@ import numpy as np
 import wandb
 
 # 引用模組 (記得去 model/model.py 加入 MLPNet)
-from model import config
+from model import config_pinn as config
 from model.dataset import TuringDataset
 from model.model import ParameterNet, MLPNet # <--- 引入 MLPNet
 from model.loss import PhysicsLoss
@@ -25,17 +25,23 @@ def set_seed(seed=42):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed) # 如果有多張 GPU
     
-    # 確保卷積算法是確定性的 (會稍微降低效能，但保證結果一致)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    print(f"🔒 Random seed set to {seed}")
+    # 根據設備類型設置對應的隨機種子
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)  # 如果有多張 GPU
+        # 確保卷積算法是確定性的 (會稍微降低效能，但保證結果一致)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    elif torch.backends.mps.is_available():
+        # MPS 設備的隨機種子設置
+        torch.mps.manual_seed(seed)
+    
+    print(f"🔒 Random seed set to {seed} (Device: {config.DEVICE})")
 
 def main():
     # --- WandB 初始化 ---
-    wandb.login(key="d969eaa6886920a565de70b8ca7ce8c9b13f6ddf")
+    wandb.login(key="c45f78d1fb5c9023cf8d9787e2d3828bd0f891e1")
     set_seed(42)
 
     generator = torch.Generator().manual_seed(42)
@@ -71,7 +77,7 @@ def main():
     dataset = TuringDataset(config.NPZ_PATH)
     dataset.scaler.to_device(config.DEVICE)
     
-    train_size = int(0.8 * len(dataset))
+    train_size = int(config.TRAIN_VAL_RATIO * len(dataset))
     val_size = len(dataset) - train_size
     train_dataset, val_dataset = random_split(
         dataset, 
@@ -93,16 +99,15 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=config.LEARNING_RATE)
     wandb.watch(model, log="all", log_freq=10)
 
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, 
-        mode=config.SCHEDULER_MODE, 
-        factor=config.SCHEDULER_FACTOR, 
-        patience=config.SCHEDULER_PATIENCE, 
-        verbose=config.SCHEDULER_VERBOSE
+    # 使用 Cosine Annealing LR Scheduler
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=config.SCHEDULER_T_MAX,
+        eta_min=config.SCHEDULER_ETA_MIN
     )
 
     # Physics Loss (如果不用 Physics，這個物件還是可以建，只是不 call)
-    criterion_physics = PhysicsLoss().to(config.DEVICE)
+    criterion_physics = PhysicsLoss(dx=config.DX, s_diffusion=config.S_DIFFUSION).to(config.DEVICE)
     
     # 4. 訓練迴圈
     for epoch in range(config.EPOCHS):
@@ -163,8 +168,8 @@ def main():
         # --- 驗證與 Log ---
         val_metrics, _ = validate_with_nrmse(model, val_loader, dataset.scaler)
         
-        current_val_loss = val_metrics['nrmse_avg']
-        scheduler.step(current_val_loss)
+        # Cosine Annealing LR: 每個epoch結束後自動衰減
+        scheduler.step()
 
         current_lr = optimizer.param_groups[0]['lr']
         log_dict = {
@@ -173,6 +178,7 @@ def main():
             "train/phy_loss": total_phy_loss / len(train_loader), # 如果沒開，這裡會是 0
             "val/nrmse_delta": val_metrics['nrmse_delta'],
             "val/nrmse_avg": val_metrics['nrmse_avg'],
+            "val/nrmse_multi_dim": val_metrics['nrmse_multi_dim'],
             "train/learning_rate": current_lr
         }
         wandb.log(log_dict)
@@ -181,7 +187,7 @@ def main():
               f"b={val_metrics['nrmse_b']:.2%} | "
               f"c={val_metrics['nrmse_c']:.2%} | "
               f"δ={val_metrics['nrmse_delta']:.2%}] "
-              f"(Avg={val_metrics['nrmse_avg']:.2%})")
+              f"(Avg={val_metrics['nrmse_avg']:.2%} | Multi={val_metrics['nrmse_multi_dim']:.2%})")
 
     torch.save(model.state_dict(), save_path)
     wandb.save(save_path)
@@ -192,6 +198,11 @@ def validate_with_nrmse(model, loader, scaler):
     model.eval()
     sum_squared_diff = torch.zeros(4).to(config.DEVICE)
     count = 0
+    
+    # 收集所有真實參數和預測參數用於多維 NRMSE
+    all_targets = []
+    all_preds = []
+    
     with torch.no_grad():
         for u_batch, _, params_target in loader:
             u_batch = u_batch.to(config.DEVICE)
@@ -201,12 +212,35 @@ def validate_with_nrmse(model, loader, scaler):
             sum_squared_diff += torch.sum(diff ** 2, dim=0)
             count += u_batch.size(0)
             
+            # 收集數據
+            all_targets.append(params_target.cpu())
+            all_preds.append(preds_norm.cpu())
+            
     mse = sum_squared_diff / count
     rmse = torch.sqrt(mse)
+    
+    # 計算多維 NRMSE (論文定義)
+    all_targets = torch.cat(all_targets, dim=0).numpy()
+    all_preds = torch.cat(all_preds, dim=0).numpy()
+    
+    num_samples = all_targets.shape[0]        # m (樣本數量)
+    num_parameters = all_targets.shape[1]     # d (參數數量，此處為 4)
+    num_items = num_samples * num_parameters  # m * d (所有單一預測總數)
+    
+    total_squared_error = np.sum((all_targets - all_preds)**2)
+    rmse_multi_dim = np.sqrt(total_squared_error / num_items)
+    
+    # 歸一化因子：真實參數平均向量的歐幾里得範數
+    y_mean_vector = np.mean(all_targets, axis=0)
+    norm_y_mean = np.linalg.norm(y_mean_vector)
+    
+    nrmse_multi_dim = rmse_multi_dim / norm_y_mean if norm_y_mean != 0 else 0.0
+    
     return {
         'nrmse_a': rmse[0].item(), 'nrmse_b': rmse[1].item(),
         'nrmse_c': rmse[2].item(), 'nrmse_delta': rmse[3].item(),
-        'nrmse_avg': torch.mean(rmse).item()
+        'nrmse_avg': torch.mean(rmse).item(),
+        'nrmse_multi_dim': nrmse_multi_dim
     }, None
 
 if __name__ == "__main__":

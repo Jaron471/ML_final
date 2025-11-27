@@ -1,5 +1,6 @@
 import os
 import sys
+import argparse
 
 # --- 1. 解決 OMP 錯誤 (必須放在最上面) ---
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -14,8 +15,23 @@ import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 
+def main():
+    parser = argparse.ArgumentParser(description="視覺閉環驗證")
+    parser.add_argument('--method', choices=['pinn', 'hybrid'], default='hybrid',
+                       help='選擇要驗證的方法 (預設: hybrid)')
+    args = parser.parse_args()
+
+    # 根據method動態選擇config
+    if args.method == 'pinn':
+        from model import config_pinn as config
+        print("👁️  視覺驗證原始PINN方法")
+    else:  # hybrid
+        from model import config_hybrid as config
+        print("👁️  視覺驗證混合循環方法")
+
+    visual_validation(config)
+
 # 引用你的模組
-from model import config_new
 from model.dataset import TuringDataset
 from model.model import ParameterNet
 
@@ -31,16 +47,29 @@ except ImportError:
         print("❌ Could not import simulation engine (gm_cupy or gm_mps).")
         sys.exit(1)
 
-def visual_validation():
+def visual_validation(config):
     # 1. 載入模型
     print("Loading model...")
-    model = ParameterNet().to(config_new.DEVICE)
-    model.load_state_dict(torch.load("checkpoint/" + config_new.MODEL_SAVE_PATH))
+    model = ParameterNet().to(config.DEVICE)
+    model.load_state_dict(torch.load("checkpoint/" + config.MODEL_SAVE_PATH))
     model.eval()
     
-    # 2. 載入數據 (隨機取 3 筆)
-    dataset = TuringDataset(config_new.NPZ_PATH)
-    indices = np.random.choice(len(dataset), size=3, replace=False)
+    # 2. 載入數據並使用訓練時的驗證集
+    dataset = TuringDataset(config.NPZ_PATH)
+    
+    # 使用與訓練時完全相同的分割邏輯
+    train_size = int(config.TRAIN_VAL_RATIO * len(dataset))
+    val_size = len(dataset) - train_size
+    _, val_dataset = torch.utils.data.random_split(
+        dataset, 
+        [train_size, val_size], 
+        generator=torch.Generator().manual_seed(42)
+    )
+    
+    # 從驗證集中隨機選取3個樣本進行視覺檢查
+    indices = np.random.choice(len(val_dataset), size=3, replace=False)
+    
+    print(f"Using validation set samples for visual check: {len(val_dataset)} total, selected {len(indices)} samples")
     
     # 3. 準備畫布
     fig, axes = plt.subplots(3, 3, figsize=(15, 12))
@@ -49,15 +78,15 @@ def visual_validation():
     print("Running re-simulation check...")
     
     for row_idx, data_idx in enumerate(indices):
-        # 取得真實數據
-        u_tensor, _, params_norm = dataset[data_idx]
+        # 取得真實數據 (從驗證集中)
+        u_tensor, _, params_norm = val_dataset[data_idx]
         u_true_img = u_tensor[0] # (128, 128)
         
         # 取得真實參數 (反正規化)
         params_true = dataset.scaler.inverse_transform_numpy(params_norm)
         
         # --- 模型預測 ---
-        u_input = torch.tensor(u_tensor).unsqueeze(0).to(config_new.DEVICE) # (1, 1, 128, 128)
+        u_input = torch.tensor(u_tensor).unsqueeze(0).to(config.DEVICE) # (1, 1, 128, 128)
         with torch.no_grad():
             pred_norm = model(u_input).cpu().numpy()[0]
         
@@ -119,4 +148,4 @@ def visual_validation():
     plt.show()
 
 if __name__ == "__main__":
-    visual_validation()
+    main()

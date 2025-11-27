@@ -16,7 +16,7 @@ import numpy as np
 import wandb
 
 # 引用你的模組
-from model import config_new
+from model import config_hybrid as config_new
 from model.dataset import TuringDataset
 from model.model import ParameterNet
 
@@ -27,10 +27,16 @@ def set_seed(seed=42):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    print(f"🔒 Random seed set to {seed}")
+    
+    # 根據設備類型設置對應的隨機種子
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    elif torch.backends.mps.is_available():
+        torch.mps.manual_seed(seed)
+    
+    print(f"🔒 Random seed set to {seed} (Device: {config_new.DEVICE})")
 
 # ============================================================
 # 1. Forward Surrogate (參數 -> 圖片)
@@ -142,6 +148,10 @@ def validate_inverse(model, loader, surrogate=None, criterion_phy=None):
     count = 0
     phy_total = 0.0
     
+    # 收集所有真實參數和預測參數用於多維 NRMSE
+    all_targets = []
+    all_preds = []
+    
     with torch.no_grad():
         for u_batch, _, p_batch in loader:
             u_batch = u_batch.to(config_new.DEVICE)
@@ -154,6 +164,10 @@ def validate_inverse(model, loader, surrogate=None, criterion_phy=None):
             sum_squared += torch.sum(diff ** 2, dim=0)
             count += u_batch.size(0)
             
+            # 收集數據
+            all_targets.append(p_batch.cpu())
+            all_preds.append(p_pred.cpu())
+            
             # Physics Error
             if surrogate and criterion_phy:
                 recon = surrogate(p_pred)
@@ -163,9 +177,27 @@ def validate_inverse(model, loader, surrogate=None, criterion_phy=None):
     mse = sum_squared / count
     rmse = torch.sqrt(mse)
     
+    # 計算多維 NRMSE (論文定義)
+    all_targets = torch.cat(all_targets, dim=0).numpy()
+    all_preds = torch.cat(all_preds, dim=0).numpy()
+    
+    num_samples = all_targets.shape[0]        # m (樣本數量)
+    num_parameters = all_targets.shape[1]     # d (參數數量，此處為 4)
+    num_items = num_samples * num_parameters  # m * d (所有單一預測總數)
+    
+    total_squared_error = np.sum((all_targets - all_preds)**2)
+    rmse_multi_dim = np.sqrt(total_squared_error / num_items)
+    
+    # 歸一化因子：真實參數平均向量的歐幾里得範數
+    y_mean_vector = np.mean(all_targets, axis=0)
+    norm_y_mean = np.linalg.norm(y_mean_vector)
+    
+    nrmse_multi_dim = rmse_multi_dim / norm_y_mean if norm_y_mean != 0 else 0.0
+    
     return {
         "rmse_avg": rmse.mean().item(),
         "rmse_delta": rmse[3].item(),
+        "nrmse_multi_dim": nrmse_multi_dim,
         "val_phy": phy_total / len(loader) if surrogate else 0.0
     }
 
@@ -174,13 +206,28 @@ def validate_inverse(model, loader, surrogate=None, criterion_phy=None):
 # ============================================================
 def main():
     set_seed(42)
-    wandb.login(key="d969eaa6886920a565de70b8ca7ce8c9b13f6ddf")
+    wandb.login(key="c45f78d1fb5c9023cf8d9787e2d3828bd0f891e1")
     
     # ==========================
-    # 設定開關 (手動切換)
+    # 決定訓練階段
     # ==========================
-    TRAIN_SURROGATE = False  # True: 跑 Phase 1, False: 跑 Phase 2+3
+    # 優先使用環境變數 (來自 run_experiment.py)
+    TRAIN_PHASE = os.environ.get('HYBRID_TRAIN_PHASE', 'both')
     
+    if TRAIN_PHASE not in ['both', 'surrogate_only', 'inverse_only']:
+        print(f"❌ 無效的 HYBRID_TRAIN_PHASE: {TRAIN_PHASE}")
+        print("應該是: 'both', 'surrogate_only', 或 'inverse_only'")
+        sys.exit(1)
+    
+    TRAIN_SURROGATE = TRAIN_PHASE in ['both', 'surrogate_only']
+    TRAIN_INVERSE = TRAIN_PHASE in ['both', 'inverse_only']
+    
+    print(f"🔧 訓練配置: TRAIN_PHASE = {TRAIN_PHASE}")
+    print(f"   Phase 1 (Surrogate): {TRAIN_SURROGATE}")
+    print(f"   Phase 2&3 (Inverse): {TRAIN_INVERSE}")
+    print("-" * 50)
+    
+    # 定義模型路徑
     ckpt_dir = "checkpoint"
     if not os.path.exists(ckpt_dir): os.makedirs(ckpt_dir)
     surrogate_path = os.path.join(ckpt_dir, "forward_surrogate.pth")
@@ -190,7 +237,7 @@ def main():
     dataset = TuringDataset(config_new.NPZ_PATH)
     dataset.scaler.to_device(config_new.DEVICE)
     
-    train_size = int(len(dataset) * 0.8)
+    train_size = int(len(dataset) * config_new.TRAIN_VAL_RATIO)
     val_size = len(dataset) - train_size
     train_set, val_set = random_split(
         dataset, [train_size, val_size], 
@@ -207,11 +254,16 @@ def main():
     # ============================================================
     if TRAIN_SURROGATE:
         print("🚀 [Phase 1] Training Surrogate (Fourier + Histogram)...")
-        wandb.init(project="Turing-Hybrid", name="Phase1-Surrogate")
+        wandb.init(project=config_new.WANDB_PROJECT, name=f"{config_new.WANDB_RUN_NAME}_Phase1-Surrogate")
         
         surrogate = ForwardSurrogate().to(config_new.DEVICE)
         optimizer_S = optim.Adam(surrogate.parameters(), lr=1e-3)
-        scheduler_S = optim.lr_scheduler.ReduceLROnPlateau(optimizer_S, mode='min', factor=0.5, patience=5)
+        # 使用 Cosine Annealing LR Scheduler
+        scheduler_S = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer_S,
+            T_max=60,  # Phase 1 有60個epochs
+            eta_min=1e-6
+        )
         
         # 定義 Loss: 頻率對齊 + 顏色分佈對齊
         criterion_four = FourierLoss(radius=0.7).to(config_new.DEVICE)
@@ -244,27 +296,46 @@ def main():
             
             # 驗證
             val_metrics = validate_surrogate(surrogate, val_loader, criterion_four, criterion_hist)
-            scheduler_S.step(val_metrics['val_hist']) # 用 Histogram Loss 來監控收斂
+            # Cosine Annealing LR: 每個epoch結束後自動衰減
+            scheduler_S.step()
             
             print(f"[Ep {epoch+1}] Train Hist={loss_sum_hist/len(train_loader):.4f} | Val Hist={val_metrics['val_hist']:.4f}")
             wandb.log({
                 "train/hist_loss": loss_sum_hist/len(train_loader),
                 "val/hist_loss": val_metrics['val_hist'],
-                "val/four_loss": val_metrics['val_fourier']
+                "val/four_loss": val_metrics['val_fourier'],
+                "lr": optimizer_S.param_groups[0]['lr']
             })
             
         torch.save(surrogate.state_dict(), surrogate_path)
         print(f"✅ Surrogate saved to {surrogate_path}")
-        return
+        
+        # 如果只訓練 Surrogate，則結束
+        if TRAIN_PHASE == 'surrogate_only':
+            print("\n✅ 任務完成！只訓練了 Phase 1 (Surrogate)")
+            return
+        
+        print("\n" + "="*50)
+        print("現在開始 Phase 2&3: 訓練 Inverse CNN...")
+        print("="*50 + "\n")
+        
+        # 結束 Phase 1 的 WandB run，開始新的 run 給 Phase 2&3
+        wandb.finish()
+        wandb.init(project=config_new.WANDB_PROJECT, name=f"{config_new.WANDB_RUN_NAME}_Phase2-3-Inverse")
 
     # ============================================================
     # 🟩 Phase 2 & 3: 訓練 Inverse CNN (逆向預測)
     # ============================================================
-    print("🚀 [Phase 2 & 3] Training Inverse CNN...")
-    if not os.path.exists(surrogate_path):
-        raise FileNotFoundError("❌ 請先跑 Phase 1 訓練 Surrogate")
     
-    wandb.init(project="Turing-Hybrid", name="Phase2-3-Inverse")
+    # 初始化 WandB (如果是 inverse_only)
+    if TRAIN_PHASE == 'inverse_only':
+        wandb.init(project=config_new.WANDB_PROJECT, name=f"{config_new.WANDB_RUN_NAME}_Phase2-3-Inverse")
+    
+    # 只訓練 Inverse 時檢查 Surrogate 是否存在
+    if not TRAIN_SURROGATE and not os.path.exists(surrogate_path):
+        raise FileNotFoundError("❌ Surrogate 模型不存在，請先訓練 Phase 1 或使用 --phase both")
+    
+    print("🚀 [Phase 2 & 3] Training Inverse CNN...")
     
     # 1. 載入並凍結 Surrogate
     surrogate = ForwardSurrogate().to(config_new.DEVICE)
@@ -276,7 +347,12 @@ def main():
     # 2. 準備 Inverse Model
     model = ParameterNet().to(config_new.DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=1e-4) # 用小一點的 LR 求穩
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=5)
+    # 使用 Cosine Annealing LR Scheduler
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=config_new.EPOCHS,  # Phase 2&3 的總epoch數
+        eta_min=1e-6
+    )
     
     criterion_phy = FourierLoss(radius=0.7).to(config_new.DEVICE)
     loss_weights = config_new.LOSS_WEIGHTS
@@ -323,18 +399,20 @@ def main():
             surrogate if lambda_phy > 0 else None, 
             criterion_phy
         )
-        scheduler.step(val_metrics['rmse_avg'])
+        # Cosine Annealing LR: 每個epoch結束後自動衰減
+        scheduler.step()
         
         avg_sup = total_sup / len(train_loader)
         
         print(f"[Ep {epoch+1}] Sup={avg_sup:.4f} | "
-              f"Val NRMSE [δ={val_metrics['rmse_delta']:.2%} | Avg={val_metrics['rmse_avg']:.2%}]")
+              f"Val NRMSE [δ={val_metrics['rmse_delta']:.2%} | Multi={val_metrics['nrmse_multi_dim']:.2%}]")
         
         wandb.log({
             "train/sup_loss": avg_sup,
             "train/phy_loss": total_phy / len(train_loader),
             "val/rmse_delta": val_metrics['rmse_delta'],
-            "val/rmse_avg": val_metrics['rmse_avg']
+            "val/nrmse_multi_dim": val_metrics['nrmse_multi_dim'],
+            "lr": optimizer.param_groups[0]['lr']
         })
         
         torch.save(model.state_dict(), inverse_path)
