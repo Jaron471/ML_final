@@ -19,6 +19,7 @@ import wandb
 from model import config_hybrid as config_new
 from model.dataset import TuringDataset
 from model.model import ParameterNet
+from model.loss import GradNorm, PhysicsLoss
 
 # ============================================================
 # 0. 固定隨機種子
@@ -122,25 +123,36 @@ class HistogramLoss(nn.Module):
 # ============================================================
 # 3. Validation Functions
 # ============================================================
-def validate_surrogate(model, loader, criterion_four, criterion_hist):
+def validate_surrogate(model, loader, criterion_four, criterion_hist, criterion_physics=None):
     model.eval()
     total_four = 0.0
     total_hist = 0.0
+    total_phy = 0.0
     
     with torch.no_grad():
-        for u_batch, _, p_batch in loader:
+        for u_batch, v_batch, p_batch in loader:
             u_batch = u_batch.to(config_new.DEVICE)
+            v_batch = v_batch.to(config_new.DEVICE)
             p_batch = p_batch.to(config_new.DEVICE)
             
             recon = model(p_batch)
             loss_f = criterion_four(recon, u_batch)
             loss_h = criterion_hist(recon, u_batch)
             
+            # 計算 Physical Loss (如果提供)
+            loss_p = torch.tensor(0.0).to(config_new.DEVICE)
+            if criterion_physics is not None:
+                loss_p = criterion_physics(recon, v_batch, p_batch)
+            
             total_four += loss_f.item()
             total_hist += loss_h.item()
+            total_phy += loss_p.item()
             
     n = len(loader)
-    return {"val_fourier": total_four/n, "val_hist": total_hist/n}
+    result = {"val_fourier": total_four/n, "val_hist": total_hist/n}
+    if criterion_physics is not None:
+        result["val_physics"] = total_phy/n
+    return result
 
 def validate_inverse(model, loader, surrogate=None, criterion_phy=None):
     model.eval()
@@ -231,7 +243,9 @@ def main():
     ckpt_dir = "checkpoint"
     if not os.path.exists(ckpt_dir): os.makedirs(ckpt_dir)
     surrogate_path = os.path.join(ckpt_dir, "forward_surrogate.pth")
+    best_surrogate_path = os.path.join(ckpt_dir, "forward_surrogate_best.pth")
     inverse_path = os.path.join(ckpt_dir, "inverse_cnn_hybrid.pth")
+    best_inverse_path = os.path.join(ckpt_dir, "inverse_cnn_hybrid_best.pth")
 
     # --- 資料載入 ---
     dataset = TuringDataset(config_new.NPZ_PATH)
@@ -257,25 +271,58 @@ def main():
         wandb.init(project=config_new.WANDB_PROJECT, name=f"{config_new.WANDB_RUN_NAME}_Phase1-Surrogate")
         
         surrogate = ForwardSurrogate().to(config_new.DEVICE)
-        optimizer_S = optim.Adam(surrogate.parameters(), lr=1e-3)
-        # 使用 Cosine Annealing LR Scheduler
-        scheduler_S = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer_S = optim.AdamW(surrogate.parameters(), lr=1e-3, weight_decay=0.01)
+        
+        # 使用 Warm Up + Cosine Annealing LR Scheduler
+        # 前10% epochs做warm up，後90%做cosine annealing
+        total_epochs = 60
+        warmup_epochs = int(0.1 * total_epochs)
+        cosine_epochs = total_epochs - warmup_epochs
+        
+        # Warm up階段：從1e-6線性增加到初始LR
+        warmup_scheduler_S = optim.lr_scheduler.LinearLR(
+            optimizer_S, 
+            start_factor=1e-6 / 1e-3,  # 從很小的lr開始
+            end_factor=1.0,  # 增加到初始lr
+            total_iters=warmup_epochs
+        )
+        
+        # Cosine annealing階段
+        cosine_scheduler_S = optim.lr_scheduler.CosineAnnealingLR(
             optimizer_S,
-            T_max=60,  # Phase 1 有60個epochs
+            T_max=cosine_epochs,
             eta_min=1e-6
+        )
+        
+        # 組合調度器
+        scheduler_S = optim.lr_scheduler.SequentialLR(
+            optimizer_S,
+            schedulers=[warmup_scheduler_S, cosine_scheduler_S],
+            milestones=[warmup_epochs]
         )
         
         # 定義 Loss: 頻率對齊 + 顏色分佈對齊
         criterion_four = FourierLoss(radius=0.7).to(config_new.DEVICE)
         criterion_hist = HistogramLoss().to(config_new.DEVICE)
         
+        # 初始化 Physical Loss (如果啟用)
+        criterion_physics = None
+        if config_new.USE_PHYSICS_PHASE1:
+            criterion_physics = PhysicsLoss(dx=config_new.DX, s_diffusion=config_new.S_DIFFUSION).to(config_new.DEVICE)
+            print("🔬 Phase 1 Physical Loss enabled")
+        
+        # 初始化最佳模型追蹤
+        best_hist_loss = float('inf')
+        
         for epoch in range(60):
             surrogate.train()
             loss_sum_four = 0
             loss_sum_hist = 0
+            loss_sum_phy = 0
             
-            for u_batch, _, p_batch in tqdm(train_loader, desc=f"Surrogate Ep{epoch+1}"):
+            for u_batch, v_batch, p_batch in tqdm(train_loader, desc=f"Surrogate Ep{epoch+1}"):
                 u_batch = u_batch.to(config_new.DEVICE)
+                v_batch = v_batch.to(config_new.DEVICE)
                 p_batch = p_batch.to(config_new.DEVICE)
                 
                 optimizer_S.zero_grad()
@@ -285,30 +332,59 @@ def main():
                 loss_f = criterion_four(recon, u_batch)
                 loss_h = criterion_hist(recon, u_batch)
                 
-                # 總 Loss (1:1 權重通常就夠了，也可以微調)
+                # 計算 Physical Loss (如果啟用)
+                loss_p = torch.tensor(0.0).to(config_new.DEVICE)
+                if criterion_physics is not None:
+                    # 使用生成的u和真實的v來計算physical loss
+                    loss_p = criterion_physics(recon, v_batch, p_batch)
+                
+                # 總 Loss
                 loss = loss_f + loss_h
+                if criterion_physics is not None:
+                    loss = loss + 0.1 * loss_p  # 使用小的權重
                 
                 loss.backward()
                 optimizer_S.step()
                 
                 loss_sum_four += loss_f.item()
                 loss_sum_hist += loss_h.item()
+                loss_sum_phy += loss_p.item()
             
             # 驗證
-            val_metrics = validate_surrogate(surrogate, val_loader, criterion_four, criterion_hist)
+            val_metrics = validate_surrogate(surrogate, val_loader, criterion_four, criterion_hist, criterion_physics)
             # Cosine Annealing LR: 每個epoch結束後自動衰減
             scheduler_S.step()
             
-            print(f"[Ep {epoch+1}] Train Hist={loss_sum_hist/len(train_loader):.4f} | Val Hist={val_metrics['val_hist']:.4f}")
-            wandb.log({
+            # 準備log信息
+            log_dict = {
                 "train/hist_loss": loss_sum_hist/len(train_loader),
                 "val/hist_loss": val_metrics['val_hist'],
                 "val/four_loss": val_metrics['val_fourier'],
                 "lr": optimizer_S.param_groups[0]['lr']
-            })
+            }
+            
+            # 如果有physical loss，也加入log
+            if criterion_physics is not None:
+                log_dict["train/phy_loss"] = loss_sum_phy/len(train_loader)
+                log_dict["val/phy_loss"] = val_metrics['val_physics']
+            
+            print(f"[Ep {epoch+1}] Train Hist={loss_sum_hist/len(train_loader):.4f} | Val Hist={val_metrics['val_hist']:.4f}", end="")
+            if criterion_physics is not None:
+                print(f" | Train Phy={loss_sum_phy/len(train_loader):.4f} | Val Phy={val_metrics['val_physics']:.4f}", end="")
+            print()
+            
+            wandb.log(log_dict)
+            
+            # 檢查是否為最佳模型
+            current_hist_loss = val_metrics['val_hist']
+            if current_hist_loss < best_hist_loss:
+                best_hist_loss = current_hist_loss
+                torch.save(surrogate.state_dict(), best_surrogate_path)
+                print(f"🏆 New best surrogate saved! Hist Loss: {best_hist_loss:.4f}")
             
         torch.save(surrogate.state_dict(), surrogate_path)
-        print(f"✅ Surrogate saved to {surrogate_path}")
+        print(f"✅ Final surrogate saved to {surrogate_path}")
+        print(f"🏆 Best surrogate saved to {best_surrogate_path} (Hist Loss: {best_hist_loss:.4f})")
         
         # 如果只訓練 Surrogate，則結束
         if TRAIN_PHASE == 'surrogate_only':
@@ -346,24 +422,70 @@ def main():
     
     # 2. 準備 Inverse Model
     model = ParameterNet().to(config_new.DEVICE)
-    optimizer = optim.Adam(model.parameters(), lr=1e-4) # 用小一點的 LR 求穩
-    # 使用 Cosine Annealing LR Scheduler
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(
+    optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0.01) # 用小一點的 LR 求穩
+    
+    # 使用 Warm Up + Cosine Annealing LR Scheduler
+    # 前10% epochs做warm up，後90%做cosine annealing
+    total_epochs = config_new.EPOCHS
+    warmup_epochs = int(0.1 * total_epochs)
+    cosine_epochs = total_epochs - warmup_epochs
+    
+    # Warm up階段：從1e-6線性增加到初始LR
+    warmup_scheduler = optim.lr_scheduler.LinearLR(
+        optimizer, 
+        start_factor=1e-6 / 1e-4,  # 從很小的lr開始
+        end_factor=1.0,  # 增加到初始lr
+        total_iters=warmup_epochs
+    )
+    
+    # Cosine annealing階段
+    cosine_scheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer,
-        T_max=config_new.EPOCHS,  # Phase 2&3 的總epoch數
+        T_max=cosine_epochs,
         eta_min=1e-6
+    )
+    
+    # 組合調度器
+    scheduler = optim.lr_scheduler.SequentialLR(
+        optimizer,
+        schedulers=[warmup_scheduler, cosine_scheduler],
+        milestones=[warmup_epochs]
     )
     
     criterion_phy = FourierLoss(radius=0.7).to(config_new.DEVICE)
     loss_weights = config_new.LOSS_WEIGHTS
+    
+    # GradNorm for dynamic loss weighting (如果啟用)
+    if config_new.USE_GRADNORM:
+        gradnorm = GradNorm(num_tasks=2, alpha=1.5, device=config_new.DEVICE)
+        initial_weights = torch.tensor([1.0, 0.01], device=config_new.DEVICE)  # lambda_phy初始值
+        print("🔧 使用 GradNorm 動態權重調整 (Phase 2&3)")
+    else:
+        gradnorm = None
+    
+    # 初始化最佳模型追蹤
+    best_nrmse = float('inf')
     
     for epoch in range(config_new.EPOCHS):
         model.train()
         total_sup = 0
         total_phy = 0
         
-        # Curriculum: 前 30 epoch 純 Data Loss, 之後加入 Physics
-        lambda_phy = 0.0 if epoch < 30 else 0.01
+        # Curriculum: Gradual introduction of surrogate physics loss
+        # 使用sigmoid函數實現平滑過渡，從epoch 20開始漸進增加到epoch 60達到最大值
+        max_lambda = 0.01
+        start_epoch = 20  # 開始引入的epoch
+        end_epoch = 60    # 達到最大值的epoch
+        
+        if epoch < start_epoch:
+            lambda_phy = 0.0
+        elif epoch >= end_epoch:
+            lambda_phy = max_lambda
+        else:
+            # Sigmoid-based gradual increase
+            progress = (epoch - start_epoch) / (end_epoch - start_epoch)
+            sigmoid_value = 1 / (1 + torch.exp(-10 * (progress - 0.5)))  # Sigmoid with steepness 10
+            lambda_phy = max_lambda * sigmoid_value.item()
         
         progress_bar = tqdm(train_loader, desc=f"Inverse Ep{epoch+1} (λ={lambda_phy})", leave=False)
         
@@ -384,7 +506,14 @@ def main():
                 recon_img = surrogate(preds_norm)
                 loss_fourier = criterion_phy(recon_img, u_batch)
                 
-            loss = loss_sup + lambda_phy * loss_fourier
+            if config_new.USE_GRADNORM and gradnorm is not None:
+                # 使用 GradNorm 動態調整權重
+                losses = [loss_sup, loss_fourier]
+                current_weights = gradnorm.adjust_weights(model, losses, initial_weights)
+                loss = current_weights[0] * loss_sup + current_weights[1] * loss_fourier
+            else:
+                # 使用固定權重 (Curriculum Learning)
+                loss = loss_sup + lambda_phy * loss_fourier
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
@@ -415,9 +544,18 @@ def main():
             "lr": optimizer.param_groups[0]['lr']
         })
         
+        # 檢查是否為最佳模型
+        current_nrmse = val_metrics['nrmse_multi_dim']
+        if current_nrmse < best_nrmse:
+            best_nrmse = current_nrmse
+            torch.save(model.state_dict(), best_inverse_path)
+            print(f"🏆 New best inverse model saved! NRMSE: {best_nrmse:.2%}")
+        
         torch.save(model.state_dict(), inverse_path)
 
-    print(f"🎉 Training Finished! Model saved to {inverse_path}")
+    print(f"🎉 Training Finished!")
+    print(f"✅ Final inverse model saved to {inverse_path}")
+    print(f"🏆 Best inverse model saved to {best_inverse_path} (NRMSE: {best_nrmse:.2%})")
 
 if __name__ == "__main__":
     main()

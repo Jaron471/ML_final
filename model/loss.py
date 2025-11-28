@@ -2,6 +2,92 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class GradNorm:
+    """
+    GradNorm: Gradient Normalization for Multi-Task Learning
+    動態調整多任務loss的權重，確保各個任務的梯度範數保持平衡
+    """
+    def __init__(self, num_tasks, alpha=1.5, device='cpu'):
+        self.num_tasks = num_tasks
+        self.alpha = alpha
+        self.device = device
+        
+        # 初始化權重 (第一個任務權重固定為1，其餘為可學習參數)
+        self.weights = nn.Parameter(torch.ones(num_tasks - 1, device=device))
+        
+    def get_weights(self):
+        """獲取當前權重 (第一個任務權重為1)"""
+        return torch.cat([torch.ones(1, device=self.device), self.weights])
+    
+    def compute_grad_norm(self, model, loss):
+        """計算特定loss下的梯度範數"""
+        # 清除之前的梯度
+        model.zero_grad()
+        
+        # 反向傳播
+        loss.backward(retain_graph=True)
+        
+        # 計算梯度範數
+        total_norm = 0
+        param_count = 0
+        for param in model.parameters():
+            if param.grad is not None:
+                param_norm = param.grad.data.norm(2)
+                total_norm += param_norm.item() ** 2
+                param_count += 1
+        
+        grad_norm = total_norm ** (1. / 2) if param_count > 0 else 0.0
+        return grad_norm
+    
+    def adjust_weights(self, model, losses, initial_weights):
+        """
+        使用GradNorm調整權重 - 簡化版本
+        
+        Args:
+            model: 神經網路模型
+            losses: 各個任務的loss (list)
+            initial_weights: 初始權重
+            
+        Returns:
+            adjusted_weights: 調整後的權重
+        """
+        if len(losses) != self.num_tasks:
+            raise ValueError(f"Expected {self.num_tasks} losses, got {len(losses)}")
+        
+        # 計算各任務的梯度範數
+        grad_norms = []
+        for loss in losses:
+            grad_norm = self.compute_grad_norm(model, loss)
+            grad_norms.append(grad_norm)
+        
+        grad_norms = torch.tensor(grad_norms, device=self.device)
+        
+        # GradNorm算法 - 簡化版本
+        # 根據梯度範數的比例調整權重
+        if grad_norms[0] > 0:
+            # 計算權重調整因子，使所有任務的加權梯度範數相似
+            weight_factors = grad_norms / grad_norms[0]
+            adjusted_weights = initial_weights / weight_factors
+            
+            # 限制權重範圍
+            adjusted_weights = torch.clamp(adjusted_weights, min=0.1, max=5.0)
+            
+            # 更新可學習權重 (簡單的指數移動平均)
+            with torch.no_grad():
+                target_weights = adjusted_weights[1:]  # 除了第一個任務
+                if hasattr(self, 'ema_weights'):
+                    self.ema_weights = 0.9 * self.ema_weights + 0.1 * target_weights
+                else:
+                    self.ema_weights = target_weights
+                
+                self.weights.data = self.ema_weights
+            
+        return self.get_weights()
+
 class PhysicsLoss(nn.Module):
     def __init__(self, dx=1.0, s_diffusion=0.4):
         super(PhysicsLoss, self).__init__()
@@ -81,3 +167,49 @@ class PhysicsLoss(nn.Module):
         loss_v = torch.sum(masked_dv**2) / effective_pixels
 
         return loss_u + loss_v
+class FourierLoss(nn.Module):
+    """比較頻譜幅度 (忽略相位/位置差異，專注於波長與方向)"""
+    def __init__(self, radius=0.7):
+        super(FourierLoss, self).__init__()
+        self.radius = radius
+
+    def forward(self, recon_img, true_img):
+        B, C, H, W = recon_img.shape
+        # 2D FFT
+        fft_recon = torch.fft.fft2(recon_img)
+        fft_true = torch.fft.fft2(true_img)
+        
+        # 取幅度譜 (Magnitude)
+        mag_recon = torch.abs(fft_recon)
+        mag_true = torch.abs(fft_true)
+        
+        # 建立低頻遮罩 (Mask)
+        yy, xx = torch.meshgrid(
+            torch.linspace(-1, 1, H, device=recon_img.device),
+            torch.linspace(-1, 1, W, device=recon_img.device),
+            indexing="ij"
+        )
+        rr = torch.sqrt(xx**2 + yy**2)
+        mask = (rr < self.radius).float()
+        
+        # 計算遮罩後的 MSE
+        diff = (mag_recon - mag_true) ** 2
+        return torch.mean(diff * mask)
+
+class HistogramLoss(nn.Module):
+    """比較像素值分佈 (忽略位置，專注於黑白比例與對比度)"""
+    def __init__(self):
+        super(HistogramLoss, self).__init__()
+        
+    def forward(self, recon_img, true_img):
+        # Flatten: (B, C, H, W) -> (B, H*W)
+        b = recon_img.size(0)
+        recon_flat = recon_img.view(b, -1)
+        true_flat = true_img.view(b, -1)
+        
+        # Sorting (排序後比較 = 比較分佈)
+        recon_sorted, _ = torch.sort(recon_flat, dim=1)
+        true_sorted, _ = torch.sort(true_flat, dim=1)
+        
+        # L1 Loss on sorted pixels
+        return torch.mean(torch.abs(recon_sorted - true_sorted))

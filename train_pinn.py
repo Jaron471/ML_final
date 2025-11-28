@@ -18,7 +18,7 @@ import wandb
 from model import config_pinn as config
 from model.dataset import TuringDataset
 from model.model import ParameterNet, MLPNet # <--- 引入 MLPNet
-from model.loss import PhysicsLoss
+from model.loss import PhysicsLoss, GradNorm
 
 def set_seed(seed=42):
     """固定所有隨機因素，確保實驗可重現"""
@@ -56,8 +56,13 @@ def main():
     filename = f"{config.MODEL_TYPE}_{'PINN' if config.USE_PHYSICS else 'Pure'}_newloss_{config.LOSS_TYPE}.pth"
     save_path = os.path.join(ckpt_dir, filename)
     
+    # 設定最佳模型儲存路徑
+    best_filename = f"{config.MODEL_TYPE}_{'PINN' if config.USE_PHYSICS else 'Pure'}_newloss_{config.LOSS_TYPE}_best.pth"
+    best_save_path = os.path.join(ckpt_dir, best_filename)
+    
     print(f"🧪 Experiment: {config.WANDB_RUN_NAME}")
-    print(f"💾 Model will be saved to: {save_path}")
+    print(f"💾 Final model will be saved to: {save_path}")
+    print(f"🏆 Best model will be saved to: {best_save_path}")
 
     print(f"🚀 Start Training using [{config.LOSS_TYPE}] Loss...")
     print(f"   Weights: {config.LOSS_WEIGHTS.cpu().numpy()}")
@@ -96,18 +101,49 @@ def main():
     else:
         raise ValueError("Unknown MODEL_TYPE in config")
 
-    optimizer = optim.Adam(model.parameters(), lr=config.LEARNING_RATE)
+    optimizer = optim.AdamW(model.parameters(), lr=config.LEARNING_RATE, weight_decay=0.01)
     wandb.watch(model, log="all", log_freq=10)
 
-    # 使用 Cosine Annealing LR Scheduler
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(
+    # 使用 Warm Up + Cosine Annealing LR Scheduler
+    # 前10% epochs做warm up，後90%做cosine annealing
+    warmup_epochs = int(0.1 * config.EPOCHS)
+    cosine_epochs = config.EPOCHS - warmup_epochs
+    
+    # Warm up階段：從1e-6線性增加到初始LR
+    warmup_scheduler = optim.lr_scheduler.LinearLR(
+        optimizer, 
+        start_factor=1e-6 / config.LEARNING_RATE,  # 從很小的lr開始
+        end_factor=1.0,  # 增加到初始lr
+        total_iters=warmup_epochs
+    )
+    
+    # Cosine annealing階段
+    cosine_scheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer,
-        T_max=config.SCHEDULER_T_MAX,
+        T_max=cosine_epochs,
         eta_min=config.SCHEDULER_ETA_MIN
+    )
+    
+    # 組合調度器
+    scheduler = optim.lr_scheduler.SequentialLR(
+        optimizer,
+        schedulers=[warmup_scheduler, cosine_scheduler],
+        milestones=[warmup_epochs]
     )
 
     # Physics Loss (如果不用 Physics，這個物件還是可以建，只是不 call)
     criterion_physics = PhysicsLoss(dx=config.DX, s_diffusion=config.S_DIFFUSION).to(config.DEVICE)
+    
+    # GradNorm for dynamic loss weighting (如果啟用)
+    if config.USE_GRADNORM and config.USE_PHYSICS:
+        gradnorm = GradNorm(num_tasks=2, alpha=1.5, device=config.DEVICE)
+        initial_weights = torch.tensor([1.0, config.LAMBDA_PHY], device=config.DEVICE)
+        print("🔧 使用 GradNorm 動態權重調整")
+    else:
+        gradnorm = None
+    
+    # 初始化最佳模型追蹤
+    best_nrmse = float('inf')
     
     # 4. 訓練迴圈
     for epoch in range(config.EPOCHS):
@@ -149,7 +185,15 @@ def main():
                 # 只有開關打開時才算這部分
                 params_pred_real = dataset.scaler.inverse_transform_tensor(params_pred_norm)
                 loss_phy = criterion_physics(u_batch, v_batch, params_pred_real)
-                loss = loss_data + config.LAMBDA_PHY * loss_phy
+                
+                if config.USE_GRADNORM and gradnorm is not None:
+                    # 使用 GradNorm 動態調整權重
+                    losses = [loss_data, loss_phy]
+                    current_weights = gradnorm.adjust_weights(model, losses, initial_weights)
+                    loss = current_weights[0] * loss_data + current_weights[1] * loss_phy
+                else:
+                    # 使用固定權重
+                    loss = loss_data + config.LAMBDA_PHY * loss_phy
             else:
                 # 純資料驅動
                 loss = loss_data
@@ -188,10 +232,18 @@ def main():
               f"c={val_metrics['nrmse_c']:.2%} | "
               f"δ={val_metrics['nrmse_delta']:.2%}] "
               f"(Avg={val_metrics['nrmse_avg']:.2%} | Multi={val_metrics['nrmse_multi_dim']:.2%})")
+        
+        # 檢查是否為最佳模型
+        current_nrmse = val_metrics['nrmse_avg']
+        if current_nrmse < best_nrmse:
+            best_nrmse = current_nrmse
+            torch.save(model.state_dict(), best_save_path)
+            print(f"🏆 New best model saved! NRMSE: {best_nrmse:.2%}")
 
     torch.save(model.state_dict(), save_path)
     wandb.save(save_path)
-    print(f"✅ Model saved to {save_path}")
+    print(f"✅ Final model saved to {save_path}")
+    print(f"🏆 Best model saved to {best_save_path} (NRMSE: {best_nrmse:.2%})")
     wandb.finish()
 
 def validate_with_nrmse(model, loader, scaler):

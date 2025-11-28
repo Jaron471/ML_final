@@ -41,6 +41,12 @@ LEARNING_RATE = 1e-4
 # - b, delta (5.0): 強力修正幾何特徵，解決 delta 卡在 5.3% 的問題。
 LOSS_WEIGHTS = torch.tensor([1.0, 5.0, 1.0, 5.0]).to(DEVICE)
 
+# 是否使用 GradNorm 動態權重調整 (Phase 2&3)
+USE_GRADNORM = False
+
+# 是否在 Phase 1 中使用 Physical Loss
+USE_PHYSICS_PHASE1 = False
+
 # ==========================================
 # 5. 其他設定 (WandB / 舊版相容)
 # ==========================================

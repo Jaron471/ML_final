@@ -56,3 +56,32 @@ class MLPNet(nn.Module):
 
     def forward(self, x):
         return self.net(x)
+
+# --- Forward Surrogate (參數 -> 圖片) ---
+class ForwardSurrogate(nn.Module):
+    def __init__(self):
+        super(ForwardSurrogate, self).__init__()
+        # Input: 4 params -> Output: 128x128 image
+        self.fc = nn.Sequential(
+            nn.Linear(4, 256),
+            nn.ReLU(),
+            nn.Linear(256, 256 * 8 * 8),
+            nn.ReLU()
+        )
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(256, 128, 4, 2, 1), # 8 -> 16
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+            nn.ConvTranspose2d(128, 64, 4, 2, 1),  # 16 -> 32
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 32, 4, 2, 1),   # 32 -> 64
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 1, 4, 2, 1),    # 64 -> 128
+            nn.Sigmoid() 
+        )
+
+    def forward(self, p):
+        x = self.fc(p).view(-1, 256, 8, 8)
+        return self.decoder(x)

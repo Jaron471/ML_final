@@ -32,6 +32,9 @@ MODEL_TYPE = "CNN"
 # 2. 是否使用 PINN (物理 Loss): True 或 False
 USE_PHYSICS = False
 
+# 3. 是否使用 GradNorm 動態權重調整: True 或 False
+USE_GRADNORM = False  # 預設關閉，需要手動開啟測試
+
 # 自動生成 WandB 專案名稱 (不用改)
 WANDB_PROJECT = "Turing-Pattern-PINN"
 
