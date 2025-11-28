@@ -29,9 +29,15 @@ if USE_CUPY:
 # 這裡我們可以設定為 [64, 64] 以獲得更好的穩定性，或是嚴格遵守論文改為 [20, 20]
 HIDDEN_LAYERS = [20, 20] 
 BATCH_SIZE = 32
-LEARNING_RATE = 0.001    # Adam 預設
+LEARNING_RATE = 0.001    # Adam 預設，初始學習率 10^-3
 EPOCHS = 2000           # 論文訓練步數很多 (10^5 steps) [cite: 1690]
 PATIENCE = 50            # 早停機制 (Early Stopping) [cite: 1689]
+
+# 學習率調整策略 (ReduceLROnPlateau)
+LR_PATIENCE = 10         # 驗證損失停止改善的容忍輪數
+LR_FACTOR = 0.1          # 學習率降低倍數 (降低至原來的 1/10)
+LR_MIN = 1e-6            # 最小學習率下限
+LR_THRESHOLD = 1e-4      # 判定損失改善的閾值
 
 # WandB 設定
 WANDB_PROJECT = "Turing-RDH-FFNN"
@@ -186,6 +192,10 @@ def train_and_evaluate():
             "hidden_layers": HIDDEN_LAYERS,
             "batch_size": BATCH_SIZE,
             "learning_rate": LEARNING_RATE,
+            "lr_scheduler": "ReduceLROnPlateau",
+            "lr_patience": LR_PATIENCE,
+            "lr_factor": LR_FACTOR,
+            "lr_min": LR_MIN,
             "epochs": EPOCHS,
             "patience": PATIENCE,
             "train_size": train_size,
@@ -201,7 +211,18 @@ def train_and_evaluate():
     
     # 論文 5.1.10: 使用 Adam 優化器與 Mean-Squared Loss [cite: 1687]
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE) 
-    criterion = nn.MSELoss() 
+    criterion = nn.MSELoss()
+    
+    # ReduceLROnPlateau: 當驗證損失進入平台期時降低學習率
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, 
+        mode='min',              # 監控指標越小越好（損失函數）
+        factor=LR_FACTOR,        # 學習率降低倍數 (×0.1)
+        patience=LR_PATIENCE,    # 容忍多少輪無改善
+        threshold=LR_THRESHOLD,  # 判定改善的最小變化
+        min_lr=LR_MIN,           # 學習率下限
+        verbose=True             # 顯示學習率調整訊息
+    ) 
     
     # --- 步驟 C: 訓練迴圈 ---
     print(f"\n=== 開始訓練 FFNN (RDH -> Params) ===")
@@ -263,9 +284,12 @@ def train_and_evaluate():
         })
         
         if (epoch+1) % 10 == 0:
-            print(f"Epoch {epoch+1:4d} | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f} | NRMSE: {nrmse_joint:.4f}")
+            print(f"Epoch {epoch+1:4d} | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f} | NRMSE: {nrmse_joint:.4f} | LR: {optimizer.param_groups[0]['lr']:.2e}")
             
-        # 3. 早停機制 (Early Stopping) [cite: 1689]
+        # 3. 學習率調整 (ReduceLROnPlateau)
+        scheduler.step(val_loss)
+        
+        # 4. 早停機制 (Early Stopping) [cite: 1689]
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             patience_cnt = 0
