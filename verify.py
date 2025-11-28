@@ -22,16 +22,16 @@ from model.utils import calculate_multidim_nrmse, find_model_path
 # Default Configuration
 # ==========================================
 DEFAULT_MODEL_TYPE = "CNN"           # CNN / MLP
-DEFAULT_LOSS_TYPE = "pure"           # pure / physical / surrogate-{num}
+DEFAULT_LOSS_TYPE = "surrogate-1"           # pure / physical / surrogate-{num}
 DEFAULT_NUM = None                   # None = Latest, or integer
 DEFAULT_SUFFIX = "best"              # best / last
 
 def calculate_metrics(targets, preds):
-    """Calculate R2, MAE, RMSE, NRMSE for each parameter"""
+    """Calculate R2, MAE, RMSE, NRMSE for each parameter (in normalized space)"""
     metrics = {}
     param_names = ['a', 'b', 'c', 'delta']
     
-    # Per-parameter metrics
+    # Per-parameter metrics (計算於歸一化空間 [0,1])
     for i, name in enumerate(param_names):
         metrics[f'R2_{name}'] = r2_score(targets[:, i], preds[:, i])
         metrics[f'MAE_{name}'] = mean_absolute_error(targets[:, i], preds[:, i])
@@ -44,6 +44,13 @@ def calculate_metrics(targets, preds):
     
     # Multi-dim NRMSE (Paper definition)
     metrics['NRMSE_multi'] = calculate_multidim_nrmse(targets, preds)
+    
+    # Per-parameter NRMSE - 使用與 Multi-dim 相同的歸一化因子
+    y_mean_vector = np.mean(targets, axis=0)
+    norm_y_mean = np.linalg.norm(y_mean_vector)
+    
+    for i, name in enumerate(param_names):
+        metrics[f'NRMSE_{name}'] = metrics[f'RMSE_{name}'] / norm_y_mean if norm_y_mean != 0 else 0.0
     
     return metrics
 
@@ -114,8 +121,10 @@ def main():
     model.eval()
 
     # 3. Inference
-    all_preds = []
-    all_targets = []
+    all_preds_norm = []
+    all_targets_norm = []
+    all_preds_real = []
+    all_targets_real = []
     
     print("🚀 Running inference...")
     with torch.no_grad():
@@ -125,25 +134,32 @@ def main():
             # Predict
             preds_norm = model(u_batch)
             
-            # Inverse transform
-            preds_norm = preds_norm.cpu().numpy()
-            targets_norm = params_target.numpy()
+            # Convert to numpy
+            preds_norm_np = preds_norm.cpu().numpy()
+            targets_norm_np = params_target.numpy()
             
-            preds_real = dataset.scaler.inverse_transform_numpy(preds_norm)
-            targets_real = dataset.scaler.inverse_transform_numpy(targets_norm)
+            # Store normalized values (for metrics calculation)
+            all_preds_norm.append(preds_norm_np)
+            all_targets_norm.append(targets_norm_np)
             
-            all_preds.append(preds_real)
-            all_targets.append(targets_real)
+            # Inverse transform for display
+            preds_real = dataset.scaler.inverse_transform_numpy(preds_norm_np)
+            targets_real = dataset.scaler.inverse_transform_numpy(targets_norm_np)
+            
+            all_preds_real.append(preds_real)
+            all_targets_real.append(targets_real)
 
-    all_preds = np.vstack(all_preds)
-    all_targets = np.vstack(all_targets)
+    all_preds_norm = np.vstack(all_preds_norm)
+    all_targets_norm = np.vstack(all_targets_norm)
+    all_preds_real = np.vstack(all_preds_real)
+    all_targets_real = np.vstack(all_targets_real)
 
-    # 4. Calculate Metrics
-    metrics = calculate_metrics(all_targets, all_preds)
+    # 4. Calculate Metrics (在歸一化空間計算，與訓練時一致)
+    metrics = calculate_metrics(all_targets_norm, all_preds_norm)
 
     # 5. Report
     print("\n" + "="*50)
-    print("📊 Evaluation Results")
+    print("📊 Evaluation Results (Normalized Space [0,1])")
     print("="*50)
     
     print(f"{'Metric':<15} {'Value':<10}")
@@ -154,11 +170,11 @@ def main():
     print(f"{'RMSE (Avg)':<15} {metrics['RMSE_avg']:.4f}")
     print("-" * 30)
     
-    print("\nDetailed Metrics per Parameter:")
-    print(f"{'Param':<10} {'R2':<10} {'MAE':<10} {'RMSE':<10}")
-    print("-" * 40)
+    print("\nDetailed Metrics per Parameter (Normalized):")
+    print(f"{'Param':<10} {'R2':<10} {'MAE':<10} {'RMSE':<10} {'NRMSE':<10}")
+    print("-" * 55)
     for name in ['a', 'b', 'c', 'delta']:
-        print(f"{name:<10} {metrics[f'R2_{name}']:<10.4f} {metrics[f'MAE_{name}']:<10.4f} {metrics[f'RMSE_{name}']:<10.4f}")
+        print(f"{name:<10} {metrics[f'R2_{name}']:<10.4f} {metrics[f'MAE_{name}']:<10.4f} {metrics[f'RMSE_{name}']:<10.4f} {metrics[f'NRMSE_{name}']:<10.2%}")
     print("="*50)
 
 if __name__ == "__main__":
