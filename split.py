@@ -35,8 +35,6 @@ def split_dataset_fixed(source_path, output_dir=".", seed=42):
     # 選項 A: 把剩下的全部當作 Test (推薦，會變成 2000 筆)
     n_test  = total_samples - n_train - n_val
     
-    # 選項 B: 如果你真的只要 200 筆 (會丟棄 1800 筆資料)，請解開下面這行註解
-    # n_test = 200 
 
     # 檢查數量
     if n_train + n_val + n_test > total_samples:

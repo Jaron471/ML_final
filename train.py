@@ -27,7 +27,7 @@ DEFAULT_ARGS = {
     "train_model": "CNN",         # Phase 2 模型架構: 'CNN' or 'MLP'
     "use_loss": "physical",           # Phase 2 Loss 類型: 'pure', 'physical', 'surrogate'
     "phys_gradual": False,         # 是否使用漸進式 Loss 引入
-    "data_fraction": 0.25,         # 數據消融測試: 使用 Train+Val 數據的比例 (0.0 ~ 1.0)
+    "data_fraction": 0.01,         # 數據消融測試: 使用 Train+Val 數據的比例 (0.0 ~ 1.0)
     "surrogate_num": None         # 指定使用的 Surrogate 模型編號 (None = 最新)
 }
 
@@ -367,7 +367,7 @@ def train_phase2(train_loader, val_loader, dataset, args, pretrain_num=None):
         total_phy = 0
         
         lambda_val = 0.0
-        max_lambda = 0.01 if args.use_loss == 'surrogate' else 0.1
+        max_lambda = 0.01 if args.use_loss == 'surrogate' else 0.01
         
         if args.use_loss in ['physical', 'surrogate']:
             if args.phys_gradual:
