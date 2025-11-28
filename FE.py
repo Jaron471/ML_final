@@ -11,35 +11,31 @@ R_max 的設定：
 import numpy as np
 import cupy as cp
 import time
+from scipy.signal import find_peaks
 
 # ==========================================
-# Part 1: 核心運算函式 (Core Functions)
+# 1. 核心運算 (Core Functions)
 # ==========================================
 
 def calculate_graph_weights_cupy(u, epsilon=0.003):
-    """
-    計算加權圖的鄰接矩陣 (Adjacency Matrix)。
-    """
+    """計算加權圖的鄰接矩陣 (論文 3.1.1)。"""
     N = u.shape[0]
-    M = N * N  # 總節點數
+    M = N * N
     
     mean_u = cp.mean(u)
     u_flat = u.flatten()
     is_high = (u_flat >= mean_u)
     
-    # 初始化稠密鄰接矩陣
     Omega = cp.zeros((M, M), dtype=cp.float32)
-    
     grid_indices = cp.arange(M).reshape(N, N)
     shifts = [(-1, 0), (1, 0), (0, -1), (0, 1)]
     
     for dr, dc in shifts:
         neighbor_indices = cp.roll(grid_indices, shift=(-dr, -dc), axis=(0, 1)).flatten()
-        
         curr_high = is_high
         neigh_high = is_high[neighbor_indices]
-        
         same_side = (curr_high == neigh_high)
+        
         weights = cp.full(M, epsilon, dtype=cp.float32)
         weights[same_side] = 1.0
         
@@ -49,144 +45,186 @@ def calculate_graph_weights_cupy(u, epsilon=0.003):
     return Omega
 
 def calculate_resistance_matrix_cupy(Omega):
-    """
-    計算電阻距離矩陣 R。
-    """
+    """計算電阻距離矩陣 R (論文 3.1.2)。"""
     M = Omega.shape[0]
     degrees = cp.sum(Omega, axis=1)
     
+    # L = D - Omega
     L_G = -Omega
     L_G[cp.diag_indices(M)] += degrees
     
+    # K = (J + L)^-1
     J = cp.ones((M, M), dtype=cp.float32)
-    Mat_to_inv = J + L_G
+    Mat_to_inv = J + L_G 
     K = cp.linalg.inv(Mat_to_inv)
     
+    # R_ij = K_ii + K_jj - 2K_ij
     diag_K = cp.diag(K)
     R = diag_K[:, None] + diag_K[None, :] - 2 * K
     
     return R
 
-def get_r_values_for_radius(R, N, radius):
+def precalculate_distance_mask(N, radius):
     """
-    輔助函式：根據半徑 r 篩選電阻值
+    【優化關鍵】
+    預先計算距離遮罩。因為網格幾何結構不變，這只需要算一次！
     """
+    print(f"正在預計算 {N}x{N} 網格的距離遮罩 (Radius={radius})...")
     M = N * N
-    # 構造網格坐標並計算距離 (Torus distance)
     rows, cols = cp.indices((N, N))
     coords = cp.stack([rows, cols], axis=-1).reshape(M, 2)
     
+    # 為了節省記憶體，我們分批計算或者使用 float16，
+    # 但為了簡單，這裡假設 GPU 夠大 (16384^2 bool mask 約 256MB)
+    
     d0 = cp.abs(coords[:, 0:1] - coords[:, 0:1].T)
-    d0 = cp.minimum(d0, N - d0)
+    d0 = cp.minimum(d0, N - d0) # Torus distance
     d1 = cp.abs(coords[:, 1:2] - coords[:, 1:2].T)
     d1 = cp.minimum(d1, N - d1)
     
     grid_dists = cp.sqrt(d0**2 + d1**2)
     mask = (grid_dists <= radius)
     
-    return R[mask]
+    print("遮罩計算完成。")
+    return mask
 
-# ==========================================
-# Part 2: 兩階段處理邏輯 (Two-Stage Process)
-# ==========================================
-
-def get_global_r_max(dataset_u, radius=8):
-    """
-    第一階段：掃描數據集以確定全局 R_max
-    嚴格遵循論文：計算每個圖案的 99% 分位數，然後取其中的最大值。
-    """
-    percentiles = []
-    total_imgs = len(dataset_u)
-    print(f"\n[Stage 1] 正在掃描 {total_imgs} 張圖案以計算全局 R_max...")
+def calculate_max_concentration(u, bins=25):
+    """計算最大濃度 c_m (論文 3.2)。"""
+    u_cpu = cp.asnumpy(u).flatten()
+    counts, bin_edges = np.histogram(u_cpu, bins=bins)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    peaks, _ = find_peaks(counts)
     
+    if len(peaks) > 0:
+        c_m = bin_centers[peaks[-1]]
+    else:
+        c_m = bin_centers[np.argmax(counts)]
+    return float(c_m)
+
+# ==========================================
+# 2. 兩階段流程 (Two-Stage Process)
+# ==========================================
+
+def get_global_r_max(dataset_u, mask, sample_size=200):
+    """
+    第一階段：【優化】只採樣部分數據來估計 R_max
+    """
+    total_imgs = len(dataset_u)
+    # 隨機採樣索引
+    if total_imgs > sample_size:
+        indices = np.random.choice(total_imgs, sample_size, replace=False)
+        print(f"\n[Stage 1] 隨機採樣 {sample_size} 張圖案來估計全局 R_max...")
+    else:
+        indices = np.arange(total_imgs)
+        print(f"\n[Stage 1] 掃描所有 {total_imgs} 張圖案...")
+
+    percentiles = []
     start_time = time.time()
-    for i, u_cpu in enumerate(dataset_u):
-        # 1. 移至 GPU
+    
+    for idx, i in enumerate(indices):
+        u_cpu = dataset_u[i]
         u_gpu = cp.asarray(u_cpu, dtype=cp.float32)
-        N = u_gpu.shape[0]
         
-        # 2. 計算權重與電阻
+        # 核心計算
         Omega = calculate_graph_weights_cupy(u_gpu)
         R = calculate_resistance_matrix_cupy(Omega)
         
-        # 3. 篩選半徑內的電阻值
-        r_values = get_r_values_for_radius(R, N, radius)
+        # 使用預計算的遮罩直接取值
+        r_values = R[mask]
         
-        # 4. 計算單張圖的 99% 分位數
         p99 = cp.percentile(r_values, 99)
         percentiles.append(float(p99))
         
-        # 進度條
-        if (i + 1) % 10 == 0:
+        # 釋放記憶體
+        del Omega, R, r_values, u_gpu
+        cp.get_default_memory_pool().free_all_blocks()
+        
+        if (idx + 1) % 10 == 0:
             elapsed = time.time() - start_time
-            print(f"  已掃描 {i + 1}/{total_imgs} 張... ({elapsed:.2f}s)")
+            print(f"  Sample {idx + 1}/{len(indices)} | Last p99: {percentiles[-1]:.2f} | Time: {elapsed:.2f}s")
             
-    # 5. 取所有圖案 99% 分位數中的最大值
     global_r_max = max(percentiles)
-    print(f"[Stage 1] 掃描完成。全局 R_max (基於 99% 分位數的最大值): {global_r_max:.4f}")
+    print(f"[Stage 1] 完成。全局 R_max: {global_r_max:.4f}")
     return global_r_max
 
-def generate_final_features(dataset_u, global_r_max, radius=8, bins=12):
+def generate_final_features(dataset_u, mask, global_r_max, bins=12):
     """
-    第二階段：使用固定的 global_r_max 生成特徵
+    第二階段：生成所有特徵
     """
     features = []
     total_imgs = len(dataset_u)
-    print(f"\n[Stage 2] 正在生成最終 RDH 特徵 (Bins={bins}, R_max={global_r_max:.4f})...")
+    print(f"\n[Stage 2] 生成最終特徵 (Total: {total_imgs})...")
     
     start_time = time.time()
+    
     for i, u_cpu in enumerate(dataset_u):
         u_gpu = cp.asarray(u_cpu, dtype=cp.float32)
-        N = u_gpu.shape[0]
         
-        # 重複計算 R (如果記憶體足夠，其實可以在 Stage 1 把 R 存下來，但通常 VRAM 不夠存所有 R)
+        # 1. 計算矩陣
         Omega = calculate_graph_weights_cupy(u_gpu)
         R = calculate_resistance_matrix_cupy(Omega)
-        r_values = get_r_values_for_radius(R, N, radius)
         
-        # 生成直方圖，固定 range=(0, global_r_max)
+        # 2. RDH
+        r_values = R[mask]
         hist, _ = cp.histogram(r_values, bins=bins, range=(0, global_r_max), density=True)
-        
-        # 歸一化 (Sum = 1)
         hist = hist / cp.sum(hist)
-        features.append(cp.asnumpy(hist))
+        
+        # 3. c_m
+        c_m = calculate_max_concentration(u_gpu, bins=25)
+        
+        # 4. 合併
+        feat_vec = np.concatenate([cp.asnumpy(hist), [c_m]])
+        features.append(feat_vec)
+        
+        # 5. 清理
+        del Omega, R, r_values, u_gpu
+        cp.get_default_memory_pool().free_all_blocks()
 
-        if (i + 1) % 10 == 0:
+        if (i + 1) % 50 == 0:
              elapsed = time.time() - start_time
-             print(f"  已生成 {i + 1}/{total_imgs} 張特徵... ({elapsed:.2f}s)")
+             # 估算剩餘時間
+             avg_time = elapsed / (i + 1)
+             remain_time = avg_time * (total_imgs - i - 1)
+             print(f"  Progress: {i + 1}/{total_imgs} | Elapsed: {elapsed/60:.1f}m | ETA: {remain_time/60:.1f}m")
         
     return np.array(features)
 
 # ==========================================
-# Part 3: 主程式入口 (Main Execution)
+# 3. 主程式
 # ==========================================
-
 if __name__ == "__main__":
-    # 1. 載入數據
-    DATA_PATH = 'turing_patterns_dataset_cuda.npz'
-    print(f"正在載入數據: {DATA_PATH}")
-    data = np.load(DATA_PATH)
-    
-    # 讀取濃度場 u
-    dataset_u = data['u'] 
-    
-    # 可以只提取前x張做測試
-    # dataset_u = dataset_u[:10] 
-    print(f"數據集大小: {dataset_u.shape}")
-
-    # 參數設定 (依據論文)
+    # 設定
+    DATA_PATH = 'turing_patterns_dataset_merged.npz'
     RADIUS = 8
     BINS = 12
+    SAMPLE_SIZE_FOR_RMAX = 200 
     
-    # 2. 執行第一階段：取得全局 R_max
-    global_r_max = get_global_r_max(dataset_u, radius=RADIUS)
+    print(f"正在載入數據: {DATA_PATH}")
+    data = np.load(DATA_PATH)
+    dataset_u = data['u'] # (20000, 128, 128)
     
-    # 3. 執行第二階段：生成特徵矩陣
-    X_features = generate_final_features(dataset_u, global_r_max, radius=RADIUS, bins=BINS)
+    # ==========================================
+    # 下採樣 (128x128 -> 64x64)
+    # ==========================================
+    # numpy 切片語法 [::2, ::2] 代表每隔 1 個像素取樣一次
+    dataset_u_small = dataset_u[:, ::2, ::2] 
+    
+    # 更新 N 的大小
+    N = dataset_u_small.shape[1] # 現在是 64
+    print(f"下採樣後數據形狀: {dataset_u_small.shape}")
+    
+    # 0. 預計算遮罩 (針對 64x64 網格)
+    mask_gpu = precalculate_distance_mask(N, RADIUS)
+    
+    # 1. 快速取得 Global R_max (使用下採樣後的數據)
+    global_r_max = get_global_r_max(dataset_u_small, mask_gpu, sample_size=SAMPLE_SIZE_FOR_RMAX)
+    
+    # 2. 生成特徵 (使用下採樣後的數據)
+    X_features = generate_final_features(dataset_u_small, mask_gpu, global_r_max, bins=BINS)
     
     print("\n================ 結果 ================")
     print(f"特徵矩陣形狀: {X_features.shape}")
-    print(f"第一張圖的特徵向量:\n{X_features[0]}")
     
-    # 4. (可選) 儲存特徵供後續機器學習使用
-    # np.savez('rdh_features.npz', features=X_features, r_max=global_r_max)
+    # 儲存
+    np.savez('features_with_cm.npz', X=X_features, ids=data['ids'])
+    print("特徵已儲存至 features_with_cm.npz")
