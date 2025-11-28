@@ -221,7 +221,6 @@ def train_and_evaluate():
         patience=LR_PATIENCE,    # 容忍多少輪無改善
         threshold=LR_THRESHOLD,  # 判定改善的最小變化
         min_lr=LR_MIN,           # 學習率下限
-        verbose=True             # 顯示學習率調整訊息
     ) 
     
     # --- 步驟 C: 訓練迴圈 ---
@@ -375,4 +374,5 @@ if __name__ == "__main__":
         print(f"錯誤：找不到特徵檔 {FEATURE_PATH}")
         print("請先執行 extract_features_v2.py 生成特徵！")
     else:
+
         train_and_evaluate()
