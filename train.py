@@ -26,8 +26,8 @@ DEFAULT_ARGS = {
     "pretrain_physloss": False,   # Phase 1 是否使用 Physical Loss
     "train_model": "CNN",         # Phase 2 模型架構: 'CNN' or 'MLP'
     "use_loss": "physical",           # Phase 2 Loss 類型: 'pure', 'physical', 'surrogate'
-    "phys_gradual": True,        # 是否使用漸進式 Loss 引入
-    "data_fraction": 1.0,         # 數據消融測試: 使用 Train+Val 數據的比例 (0.0 ~ 1.0)
+    "phys_gradual": False,         # 是否使用漸進式 Loss 引入
+    "data_fraction": 0.25,         # 數據消融測試: 使用 Train+Val 數據的比例 (0.0 ~ 1.0)
     "surrogate_num": None         # 指定使用的 Surrogate 模型編號 (None = 最新)
 }
 
@@ -122,7 +122,7 @@ def validate_inverse(model, loader, surrogate=None, criterion_phy=None):
 # ============================================================
 # 1. Phase 1 Training
 # ============================================================
-def train_phase1(train_loader, val_loader, use_phys_loss):
+def train_phase1(train_loader, val_loader, use_phys_loss, data_fraction=1.0):
     print("🚀 [Phase 1] Training Surrogate (Fourier + Histogram)...")
     wandb.init(project=config.WANDB_PROJECT, name=f"Phase1-Surrogate", reinit=True)
     
@@ -136,7 +136,9 @@ def train_phase1(train_loader, val_loader, use_phys_loss):
     current_num = get_next_version(surrogate_dir, pattern_regex)
     
     wandb_name = wandb.run.name if wandb.run.name else "unknown"
-    model_filename = f"Surrogate_{loss_tag}_{current_num}_{wandb_name}.pth"
+    
+    # --- 修改點 1: 在檔名加入 frac 資訊 ---
+    model_filename = f"Surrogate_{loss_tag}_{current_num}_frac{data_fraction}_{wandb_name}.pth"
     final_model_path = os.path.join(surrogate_dir, model_filename)
     
     print(f"📝 Model will be saved as: {model_filename}")
@@ -245,12 +247,6 @@ def train_phase1(train_loader, val_loader, use_phys_loss):
         
         if val_metrics['val_hist'] < best_hist_loss:
             best_hist_loss = val_metrics['val_hist']
-            # We only save the final model with the version number to avoid clutter, 
-            # or we could save best with a suffix. Let's just save final for now as per request structure,
-            # but usually we want the best. The user asked for specific naming.
-            # Let's save 'best' to a temp name and rename at the end or just overwrite.
-            # Actually user spec: Surrogate_{pure/phys}_{num}_{wandb_name}.pth
-            # Doesn't specify best/last for surrogate. Let's assume we save the best one as the main one.
             torch.save(surrogate.state_dict(), final_model_path)
             print(f"🏆 New best surrogate saved! Hist Loss: {best_hist_loss:.4f}")
             
@@ -283,11 +279,6 @@ def train_phase2(train_loader, val_loader, dataset, args, pretrain_num=None):
         else:
             print("🔗 Using latest Surrogate model")
             
-        # Find the file
-        # Pattern: Surrogate_{pure/phys}_{num}_{wandb_name}.pth
-        # We need to match any type (pure/phys) if not specified, but usually we want to match the one compatible?
-        # Actually, the user didn't specify that phase 2 must use a specific type of surrogate (pure vs phys).
-        # Let's assume we look for any surrogate.
         pattern_regex = r"Surrogate_.*_(?P<num>\d+)_.*\.pth"
         surrogate_path = find_model_path(ckpt_dir, pattern_regex, version=target_num)
         
@@ -298,7 +289,6 @@ def train_phase2(train_loader, val_loader, dataset, args, pretrain_num=None):
         
         # Extract num for naming if we found latest
         if target_num is None:
-            # Extract from filename
             match = re.search(r"_(?P<num>\d+)_", os.path.basename(surrogate_path))
             if match:
                 target_num = int(match.group('num'))
@@ -352,23 +342,19 @@ def train_phase2(train_loader, val_loader, dataset, args, pretrain_num=None):
     ckpt_dir = "checkpoint"
     if not os.path.exists(ckpt_dir): os.makedirs(ckpt_dir)
     
-    # Naming: {model_type}_{loss_type}_{num}_{wandb_name}_{best/last}.pth
-    # loss_type: pure, physical, surrogate-{num}
+    # Naming
     loss_type_str = args.use_loss
     if args.use_loss == 'surrogate':
         loss_type_str = f"surrogate{surrogate_num_str}"
         
-    # Determine current num
-    # Pattern: {model_type}_{loss_type}_{num}_{wandb_name}_{best/last}.pth
-    # Regex needs to be careful about underscores.
-    # We can search for {model_type}_{loss_type}_(?P<num>\d+)_...
-    # Note: loss_type might contain hyphens or underscores? "surrogate-1" has hyphen.
-    # Safe regex: f"{args.train_model}_{loss_type_str}_(?P<num>\d+)_.*\.pth"
     pattern_regex = f"{args.train_model}_{loss_type_str}_(?P<num>\\d+)_.*\\.pth"
     current_num = get_next_version(ckpt_dir, pattern_regex)
     
     wandb_name = wandb.run.name if wandb.run.name else "unknown"
-    base_filename = f"{args.train_model}_{loss_type_str}_{current_num}_{wandb_name}"
+    
+    # --- 修改點 2: 在檔名加入 frac 資訊 ---
+    # 將 frac 放在 num 的後面，避免破壞 get_next_version 的 regex 匹配
+    base_filename = f"{args.train_model}_{loss_type_str}_{current_num}_frac{args.data_fraction}_{wandb_name}"
     
     best_model_path = os.path.join(ckpt_dir, f"{base_filename}_best.pth")
     final_model_path = os.path.join(ckpt_dir, f"{base_filename}_last.pth")
@@ -380,9 +366,8 @@ def train_phase2(train_loader, val_loader, dataset, args, pretrain_num=None):
         total_sup = 0
         total_phy = 0
         
-        # Calculate Lambda for Auxiliary Loss
         lambda_val = 0.0
-        max_lambda = 0.01 if args.use_loss == 'surrogate' else 0.1 # Default max values from original scripts
+        max_lambda = 0.01 if args.use_loss == 'surrogate' else 0.1
         
         if args.use_loss in ['physical', 'surrogate']:
             if args.phys_gradual:
@@ -397,7 +382,7 @@ def train_phase2(train_loader, val_loader, dataset, args, pretrain_num=None):
                     sigmoid_value = 1 / (1 + np.exp(-10 * (progress - 0.5)))
                     lambda_val = max_lambda * sigmoid_value
             else:
-                lambda_val = max_lambda # Constant from start
+                lambda_val = max_lambda
         
         progress_bar = tqdm(train_loader, desc=f"Inverse Ep{epoch+1} (λ={lambda_val:.4f})", leave=False)
         
@@ -415,7 +400,7 @@ def train_phase2(train_loader, val_loader, dataset, args, pretrain_num=None):
             
             # Auxiliary Loss
             loss_aux = torch.tensor(0.0).to(config.DEVICE)
-            if lambda_val > 0 or (gradnorm is not None): # Calculate aux loss if lambda > 0 OR if using GradNorm (which needs gradients)
+            if lambda_val > 0 or (gradnorm is not None):
                 if args.use_loss == 'surrogate':
                     recon_img = surrogate(preds_norm)
                     loss_aux = criterion_phy_surrogate(recon_img, u_batch)
@@ -424,12 +409,10 @@ def train_phase2(train_loader, val_loader, dataset, args, pretrain_num=None):
                     loss_aux = criterion_phy_pinn(u_batch, v_batch, params_pred_real)
             
             if gradnorm is not None and args.use_loss in ['physical', 'surrogate']:
-                 # Use GradNorm
                 losses = [loss_sup, loss_aux]
                 current_weights = gradnorm.adjust_weights(model, losses, initial_weights)
                 loss = current_weights[0] * loss_sup + current_weights[1] * loss_aux
             else:
-                # Standard weighted sum
                 loss = loss_sup + lambda_val * loss_aux
             
             loss.backward()
@@ -440,7 +423,6 @@ def train_phase2(train_loader, val_loader, dataset, args, pretrain_num=None):
             total_phy += loss_aux.item()
             progress_bar.set_postfix({'Sup': loss_sup.item(), 'Aux': loss_aux.item()})
             
-        # Validation
         val_metrics = validate_inverse(
             model, val_loader, 
             surrogate if (args.use_loss == 'surrogate' and lambda_val > 0) else None, 
@@ -498,25 +480,19 @@ def main():
     print("📂 Loading datasets from separate files...")
     
     # 1. 分別讀取 Train 和 Val
-    # 注意：TuringDataset 初始化時會自動計算該檔案的 min/max 做 Scaler
     train_set = TuringDataset(config.TRAIN_PATH)
     val_set = TuringDataset(config.VAL_PATH)
-    # test_set = TuringDataset(config.TEST_PATH) # 如果之後需要測試集再打開
 
     # 2. 設定全域 Scaler
-    # ⚠️ 關鍵：我們使用 Training Set 的 Scaler 作為基準
-    # 這樣在計算 PINN Loss 還原物理數值時，是用訓練集的標準來還原
     dataset = train_set 
     dataset.scaler.to_device(config.DEVICE)
 
     # 3. Data Ablation (資料消融測試)
-    # 如果 args.data_fraction < 1.0，我們只對 "Training Set" 進行縮減
     if args.data_fraction < 1.0:
         total_train = len(train_set)
         used_size = int(total_train * args.data_fraction)
         unused_size = total_train - used_size
         
-        # 使用 random_split 切分出要用的部分
         train_set, _ = random_split(
             train_set, [used_size, unused_size], 
             generator=torch.Generator().manual_seed(42)
@@ -531,7 +507,8 @@ def main():
     
     pretrain_num = None
     if args.pretrain:
-        pretrain_num = train_phase1(train_loader, val_loader, args.pretrain_physloss)
+        # --- 修改點 3: 傳入 args.data_fraction ---
+        pretrain_num = train_phase1(train_loader, val_loader, args.pretrain_physloss, args.data_fraction)
         
     train_phase2(train_loader, val_loader, dataset, args, pretrain_num)
 
