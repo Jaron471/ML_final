@@ -25,7 +25,7 @@ DEFAULT_ARGS = {
     "pretrain": False,            # 是否訓練 Phase 1 (Surrogate)
     "pretrain_physloss": False,   # Phase 1 是否使用 Physical Loss
     "train_model": "CNN",         # Phase 2 模型架構: 'CNN' or 'MLP'
-    "use_loss": "surrogate",           # Phase 2 Loss 類型: 'pure', 'physical', 'surrogate'
+    "use_loss": "physical",           # Phase 2 Loss 類型: 'pure', 'physical', 'surrogate'
     "phys_gradual": True,        # 是否使用漸進式 Loss 引入
     "data_fraction": 1.0,         # 數據消融測試: 使用 Train+Val 數據的比例 (0.0 ~ 1.0)
     "surrogate_num": None         # 指定使用的 Surrogate 模型編號 (None = 最新)
@@ -492,50 +492,42 @@ def main():
     set_seed(42)
     wandb.login(key="c45f78d1fb5c9023cf8d9787e2d3828bd0f891e1")
     
-    # Load Data
-    dataset = TuringDataset(config.NPZ_PATH)
+    # ====================================================
+    # 📂 Load Data from Separate Files (已分好的資料)
+    # ====================================================
+    print("📂 Loading datasets from separate files...")
+    
+    # 1. 分別讀取 Train 和 Val
+    # 注意：TuringDataset 初始化時會自動計算該檔案的 min/max 做 Scaler
+    train_set = TuringDataset(config.TRAIN_PATH)
+    val_set = TuringDataset(config.VAL_PATH)
+    # test_set = TuringDataset(config.TEST_PATH) # 如果之後需要測試集再打開
+
+    # 2. 設定全域 Scaler
+    # ⚠️ 關鍵：我們使用 Training Set 的 Scaler 作為基準
+    # 這樣在計算 PINN Loss 還原物理數值時，是用訓練集的標準來還原
+    dataset = train_set 
     dataset.scaler.to_device(config.DEVICE)
-    
-    # Split 1: Train+Valid (80%) vs Test (20%)
-    total_size = len(dataset)
-    test_size = int(total_size * config.TEST_RATIO)
-    train_val_pool_size = total_size - test_size
-    
-    train_val_pool, test_set = random_split(
-        dataset, [train_val_pool_size, test_size], 
-        generator=torch.Generator().manual_seed(42)
-    )
-    
-    # Data Ablation: Subsample Train+Valid pool
+
+    # 3. Data Ablation (資料消融測試)
+    # 如果 args.data_fraction < 1.0，我們只對 "Training Set" 進行縮減
     if args.data_fraction < 1.0:
-        used_size = int(train_val_pool_size * args.data_fraction)
-        unused_size = train_val_pool_size - used_size
-        train_val_set, _ = random_split(
-            train_val_pool, [used_size, unused_size],
+        total_train = len(train_set)
+        used_size = int(total_train * args.data_fraction)
+        unused_size = total_train - used_size
+        
+        # 使用 random_split 切分出要用的部分
+        train_set, _ = random_split(
+            train_set, [used_size, unused_size], 
             generator=torch.Generator().manual_seed(42)
         )
-        print(f"📉 Data Ablation: Using {args.data_fraction:.1%} of Train+Val pool ({used_size} samples)")
-    else:
-        train_val_set = train_val_pool
+        print(f"📉 Data Ablation: Using {args.data_fraction:.1%} of Training data ({used_size} samples)")
 
-    # Split 2: Train vs Valid (3:1 ratio)
-    # Calculate relative ratio from config
-    # TRAIN_RATIO (0.6) / (TRAIN_RATIO (0.6) + VAL_RATIO (0.2)) = 0.75
-    train_ratio_relative = config.TRAIN_RATIO / (config.TRAIN_RATIO + config.VAL_RATIO)
-    
-    current_pool_size = len(train_val_set)
-    train_size = int(current_pool_size * train_ratio_relative)
-    val_size = current_pool_size - train_size
-    
-    train_set, val_set = random_split(
-        train_val_set, [train_size, val_size],
-        generator=torch.Generator().manual_seed(42)
-    )
-    
+    # 4. 建立 DataLoader
     train_loader = DataLoader(train_set, batch_size=config.BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(val_set, batch_size=config.BATCH_SIZE, shuffle=False)
     
-    print(f"📦 Data Split: Train={len(train_set)}, Val={len(val_set)}, Test={len(test_set)} (Total Used: {len(train_set)+len(val_set)})")
+    print(f"📦 Data Loaded: Train={len(train_set)}, Val={len(val_set)}")
     
     pretrain_num = None
     if args.pretrain:

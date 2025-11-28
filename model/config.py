@@ -9,6 +9,10 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.ba
 # 指向你合併後的大數據集 (確保這檔案在根目錄)
 NPZ_PATH = "turing_patterns_dataset_merged.npz"
 
+TRAIN_PATH = "train_data.npz"
+VAL_PATH =   "val_data.npz"
+TEST_PATH =  "test_data.npz"
+
 # 儲存路徑 (會由 train.py 動態修改，這裡只是預設值)
 MODEL_SAVE_PATH = "checkpoint/model.pth"
 
