@@ -256,7 +256,7 @@ python visualize_lambda_schedule.py
 | 方法 | 核心技術 | 優勢 | 適用場景 | 計算需求 | LR Scheduler | 優化器 |
 |------|----------|------|----------|----------|-------------|--------|
 | **原始PINN** (`train_pinn.py`) | CNN/MLP + PDE殘差 | 直接物理約束，理論嚴謹 | 標準逆問題 | 中等 | Warm-up + Cosine | AdamW |
-| **RDH特徵** (`FE.py`) | 圖論電阻距離 | 拓撲結構捕捉，解釋性強 | 特徵分析，可視化 | 高 (GPU) | - | - |
+| **RDH特徵** (`FE.py`) | 圖論電阻距離 | 拓撲結構捕捉，解釋性強 | 特徵分析，可視化 | 高 (GPU) | Reduce LR on Plateau | Adam |
 | **混合循環** (`train_hybrid.py`) | 雙向循環一致性 + 漸進損失 | 強物理一致性，平滑訓練，魯棒性高 | 高精度應用 | 高 | Warm-up + Cosine | AdamW |
 
 **建議使用順序**：從原始PINN開始 → 嘗試混合循環 → 視需要提取RDH特徵進行分析。
