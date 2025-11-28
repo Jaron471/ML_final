@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, random_split
 import numpy as np
+import cupy as cp
 import os
 import wandb
 
@@ -16,7 +17,12 @@ SAVE_PATH = 'rdh_ffnn_model.pth'            # 模型存檔路徑
 
 # 硬體設定
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+USE_CUPY = cp.cuda.is_available()
 print(f"使用裝置: {DEVICE}")
+print(f"CuPy 可用: {USE_CUPY}")
+if USE_CUPY:
+    print(f"CuPy CUDA 版本: {cp.cuda.runtime.runtimeGetVersion()}")
+    print(f"GPU 裝置: {cp.cuda.Device(0).compute_capability}")
 
 # 訓練超參數 (依據論文 5.1.10 與 5.4 節)
 # 論文對大數據集使用 (20, 20) 的隱藏層結構 [cite: 1891-1892]
@@ -24,7 +30,7 @@ print(f"使用裝置: {DEVICE}")
 HIDDEN_LAYERS = [20, 20] 
 BATCH_SIZE = 32
 LEARNING_RATE = 0.001    # Adam 預設
-EPOCHS = 2000            # 論文訓練步數很多 (10^5 steps) [cite: 1690]
+EPOCHS = 2000           # 論文訓練步數很多 (10^5 steps) [cite: 1690]
 PATIENCE = 50            # 早停機制 (Early Stopping) [cite: 1689]
 
 # WandB 設定
@@ -64,32 +70,54 @@ class PaperFFNN(nn.Module):
 # 3. 專用資料集 (RDH Dataset)
 # ==========================================
 class RDHDataset(Dataset):
-    def __init__(self, feature_path, label_path):
+    def __init__(self, feature_path, label_path, use_cupy=True):
         # 1. 載入特徵 X (13維: 12 RDH + 1 c_m)
         print(f"正在載入特徵: {feature_path}")
         if not os.path.exists(feature_path):
             raise FileNotFoundError(f"找不到 {feature_path}，請先執行 extract_features_v2.py")
             
         f_data = np.load(feature_path)
-        self.X = f_data['X'].astype(np.float32)
+        X_np = f_data['X'].astype(np.float32)
         
         # 2. 載入標籤 Y (a, b, c, delta)
         print(f"正在載入標籤: {label_path}")
         l_data = np.load(label_path)
         
-        # 堆疊成 (N, 4) 矩陣
-        self.Y = np.stack([
-            l_data['a'], 
-            l_data['b'], 
-            l_data['c'], 
-            l_data['delta']
-        ], axis=1).astype(np.float32)
-        
-        # 3. 標籤歸一化 (Target Preprocessing)
-        # 依據論文 5.1.7 公式 (80): y'_{ij} = y_{ij} / max_l(y_{lj})
-        # 這是為了讓 Loss 收斂更穩定
-        self.y_max = np.max(self.Y, axis=0)
-        self.Y_norm = self.Y / self.y_max
+        # 使用 CuPy 加速數據處理
+        if use_cupy and USE_CUPY:
+            print("使用 CuPy 加速數據預處理...")
+            # 在 GPU 上堆疊和處理
+            Y_cp = cp.stack([
+                cp.asarray(l_data['a']), 
+                cp.asarray(l_data['b']), 
+                cp.asarray(l_data['c']), 
+                cp.asarray(l_data['delta'])
+            ], axis=1).astype(cp.float32)
+            
+            # 3. 標籤歸一化 (Target Preprocessing)
+            # 依據論文 5.1.7 公式 (80): y'_{ij} = y_{ij} / max_l(y_{lj})
+            # 使用 CuPy 在 GPU 上計算
+            self.y_max = cp.asnumpy(cp.max(Y_cp, axis=0))
+            Y_norm_cp = Y_cp / cp.asarray(self.y_max)
+            
+            # 轉回 NumPy (PyTorch 需要 NumPy 或 CPU tensor)
+            self.X = X_np
+            self.Y = cp.asnumpy(Y_cp)
+            self.Y_norm = cp.asnumpy(Y_norm_cp)
+            print("CuPy 預處理完成")
+        else:
+            # 使用 NumPy 處理（回退模式）
+            print("使用 NumPy 進行數據預處理...")
+            self.Y = np.stack([
+                l_data['a'], 
+                l_data['b'], 
+                l_data['c'], 
+                l_data['delta']
+            ], axis=1).astype(np.float32)
+            
+            self.y_max = np.max(self.Y, axis=0)
+            self.Y_norm = self.Y / self.y_max
+            self.X = X_np
         
         print(f"數據準備完成: X shape={self.X.shape}, Y shape={self.Y.shape}")
         print(f"參數最大值 (用於反歸一化): {self.y_max}")
@@ -106,13 +134,27 @@ class RDHDataset(Dataset):
 # ==========================================
 # 4. 訓練與評估流程
 # ==========================================
-def compute_nrmse(preds, targets):
+def compute_nrmse(preds, targets, use_cupy=True):
     """計算 NRMSE (用於驗證階段的快速評估)"""
-    mse = np.mean((preds - targets)**2, axis=0)
-    rmse = np.sqrt(mse)
-    y_mean = np.mean(targets, axis=0)
-    nrmse_per_param = rmse / y_mean
-    return nrmse_per_param, np.mean(nrmse_per_param)
+    if use_cupy and USE_CUPY:
+        # 使用 CuPy 在 GPU 上計算 NRMSE
+        preds_cp = cp.asarray(preds)
+        targets_cp = cp.asarray(targets)
+        
+        mse = cp.mean((preds_cp - targets_cp)**2, axis=0)
+        rmse = cp.sqrt(mse)
+        y_mean = cp.mean(targets_cp, axis=0)
+        nrmse_per_param = rmse / y_mean
+        
+        # 轉回 NumPy
+        return cp.asnumpy(nrmse_per_param), float(cp.mean(nrmse_per_param))
+    else:
+        # NumPy 版本（回退模式）
+        mse = np.mean((preds - targets)**2, axis=0)
+        rmse = np.sqrt(mse)
+        y_mean = np.mean(targets, axis=0)
+        nrmse_per_param = rmse / y_mean
+        return nrmse_per_param, np.mean(nrmse_per_param)
 
 def train_and_evaluate():
     # --- 步驟 A: 數據準備 ---
@@ -269,13 +311,26 @@ def train_and_evaluate():
     
     # 計算 NRMSE (Normalized Root Mean Square Error) [cite: 1376-1380]
     # 公式 (45): NRMSE = RMSE / mean(y_ij)
+    # 使用 CuPy 加速最終評估計算
     
-    mse = np.mean((preds - targets)**2, axis=0)
-    rmse = np.sqrt(mse)
-    y_mean = np.mean(targets, axis=0)
-    
-    nrmse_per_param = rmse / y_mean
-    total_nrmse = np.mean(nrmse_per_param)
+    if USE_CUPY:
+        print("使用 CuPy 加速最終 NRMSE 計算...")
+        preds_cp = cp.asarray(preds)
+        targets_cp = cp.asarray(targets)
+        
+        mse = cp.mean((preds_cp - targets_cp)**2, axis=0)
+        rmse = cp.sqrt(mse)
+        y_mean = cp.mean(targets_cp, axis=0)
+        
+        nrmse_per_param = cp.asnumpy(rmse / y_mean)
+        total_nrmse = float(cp.mean(rmse / y_mean))
+    else:
+        mse = np.mean((preds - targets)**2, axis=0)
+        rmse = np.sqrt(mse)
+        y_mean = np.mean(targets, axis=0)
+        
+        nrmse_per_param = rmse / y_mean
+        total_nrmse = np.mean(nrmse_per_param)
     
     print(f"\n總體 NRMSE: {total_nrmse:.4f}")
     print("(論文標準: < 0.2 為良好, < 0.05 為優秀)")
