@@ -29,8 +29,8 @@ def split_dataset_fixed(source_path, output_dir=".", seed=42):
     # ==========================================
     # 🔢 設定切分數量 (在此修改)
     # ==========================================
-    n_train = 16000
-    n_val   = 2000
+    n_train = 12000
+    n_val   = 4000
     
     # 選項 A: 把剩下的全部當作 Test (推薦，會變成 2000 筆)
     n_test  = total_samples - n_train - n_val
