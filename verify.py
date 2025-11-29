@@ -15,16 +15,17 @@ if sys.stdout.encoding != 'utf-8':
 # Import modules
 from model import config
 from model.dataset import TuringDataset
-from model.model import ParameterNet, MLPNet
+from model.model import ParameterNet, MLPNet, PaperCNN
 from model.utils import calculate_multidim_nrmse, find_model_path
 
 # ==========================================
 # Default Configuration
 # ==========================================
-DEFAULT_MODEL_TYPE = "CNN"           # CNN / MLP
-DEFAULT_LOSS_TYPE = "surrogate"       # pure / physical / surrogate-{num}
+DEFAULT_MODEL_TYPE = "CNN"           # CNN / MLP / PaperCNN
+DEFAULT_LOSS_TYPE = "physical"       # pure / physical / surrogate-{num}
 DEFAULT_NUM = None                   # None = Latest, or integer
 DEFAULT_SUFFIX = "last"              # best / last
+DEFAULT_DATA_FRACTION = 1.0          # Data fraction used in training (for reference)
 
 def calculate_metrics(targets, preds, scaler=None):
     """Calculate R2, MAE, RMSE, NRMSE for each parameter"""
@@ -57,10 +58,11 @@ def calculate_metrics(targets, preds, scaler=None):
 
 def main():
     parser = argparse.ArgumentParser(description="Verify Model Performance on Test Set")
-    parser.add_argument('--model-type', type=str, default=DEFAULT_MODEL_TYPE, choices=['CNN', 'MLP'], help='Model architecture')
-    parser.add_argument('--loss-type', type=str, default=DEFAULT_LOSS_TYPE, help='Loss type used in training')
+    parser.add_argument('--model-type', type=str, default=DEFAULT_MODEL_TYPE, choices=['CNN', 'MLP', 'PaperCNN'], help='Model architecture')
+    parser.add_argument('--loss-type', type=str, default=DEFAULT_LOSS_TYPE, help='Loss type used in training (e.g., pure, physical, surrogate-1, surrogate-2)')
     parser.add_argument('--num', type=int, default=DEFAULT_NUM, help='Training run number (default: latest)')
     parser.add_argument('--suffix', type=str, default=DEFAULT_SUFFIX, choices=['best', 'last'], help='Which checkpoint to load')
+    parser.add_argument('--data-fraction', type=float, default=DEFAULT_DATA_FRACTION, help='Data fraction used in training (for reference, does not affect loading)')
     parser.add_argument('--model-path', type=str, default=None, help='Direct path to model (overrides auto-search)')
     
     args = parser.parse_args()
@@ -101,7 +103,8 @@ def main():
     else:
         ckpt_dir = "checkpoint"
         # 這裡的 Regex 必須配合 train.py 的存檔命名規則
-        # Pattern example: CNN_physical_1_Unified_Run_best.pth
+        # Pattern example: CNN_physical_1_frac1.0_wandbname_best.pth
+        # 或者: CNN_surrogate-1_5_frac1.0_wandbname_best.pth
         pattern_regex = f"{args.model_type}_{args.loss_type}_(?P<num>\\d+)_.*_{args.suffix}\\.pth"
         
         model_path = find_model_path(ckpt_dir, pattern_regex, version=args.num)
@@ -109,16 +112,53 @@ def main():
         if model_path is None:
             print(f"❌ Could not find model matching: {pattern_regex}")
             print(f"   In directory: {os.path.abspath(ckpt_dir)}")
+            print(f"   💡 Tip: For surrogate models, use format 'surrogate-N' where N is the surrogate version number")
             sys.exit(1)
 
     print(f"🔍 Verifying model: {os.path.basename(model_path)}")
     print(f"🏗️  Architecture: {args.model_type}")
+    
+    # Parse additional info from filename for reference
+    filename = os.path.basename(model_path)
+    import re
+    
+    # Extract data fraction
+    frac_match = re.search(r'_frac([\d.]+)_', filename)
+    if frac_match:
+        data_fraction = float(frac_match.group(1))
+        print(f"📊 Training data fraction: {data_fraction:.1%}")
+    else:
+        print(f"📊 Training data fraction: Unknown (using default {args.data_fraction:.1%})")
+    
+    # Extract PaperCNN parameters if applicable
+    if args.model_type == "PaperCNN":
+        param_match = re.search(r'_nk(\d+)_np(\d+)_nf(\d+)_', filename)
+        if param_match:
+            nk, np_size, nf = map(int, param_match.groups())
+            print(f"📐 PaperCNN parameters: nk={nk}, np={np_size}, nf={nf}")
+        else:
+            print("⚠️  Could not parse PaperCNN parameters from filename")
 
     # Initialize Model
     if args.model_type == "CNN":
         model = ParameterNet().to(config.DEVICE)
     elif args.model_type == "MLP":
         model = MLPNet().to(config.DEVICE)
+    elif args.model_type == "PaperCNN":
+        # Parse PaperCNN parameters from model filename
+        # Expected format: PaperCNN_*_nk{NK}_np{NP}_nf{NF}_*_{suffix}.pth
+        import re
+        filename = os.path.basename(model_path)
+        match = re.search(r'_nk(\d+)_np(\d+)_nf(\d+)_', filename)
+        if match:
+            nk, np_size, nf = map(int, match.groups())
+            print(f"📐 PaperCNN parameters: nk={nk}, np={np_size}, nf={nf}")
+        else:
+            # Fallback to defaults if parsing fails
+            nk, np_size, nf = 5, 5, 5
+            print(f"⚠️  Could not parse PaperCNN parameters from filename, using defaults: nk={nk}, np={np_size}, nf={nf}")
+        
+        model = PaperCNN(nk=nk, np_size=np_size, nf=nf).to(config.DEVICE)
     
     # Load Weights
     try:

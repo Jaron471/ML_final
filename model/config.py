@@ -34,7 +34,7 @@ VAL_RATIO = 0.2        # 20% 驗證
 TEST_RATIO = 0.2       # 20% 測試
 
 # 學習率設定
-LEARNING_RATE = 1e-4   # Inverse Model 建議用 1e-4
+LEARNING_RATE = 1e-3   # Inverse Model 建議用 1e-4
 SCHEDULER_ETA_MIN = 1e-6
 
 # ==========================================

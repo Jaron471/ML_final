@@ -14,7 +14,7 @@ import wandb
 # Import modules
 from model import config  # Unified config
 from model.dataset import TuringDataset
-from model.model import ParameterNet, MLPNet, ForwardSurrogate
+from model.model import ParameterNet, MLPNet, ForwardSurrogate, PaperCNN, PaperSurrogate
 from model.loss import GradNorm, PhysicsLoss, FourierLoss, HistogramLoss, TopKPhysicsLoss
 from model.utils import calculate_multidim_nrmse, get_next_version, find_model_path
 
@@ -22,13 +22,14 @@ from model.utils import calculate_multidim_nrmse, get_next_version, find_model_p
 # Default Configuration (可在此修改預設值)
 # ============================================================
 DEFAULT_ARGS = {
-    "pretrain": False,            # 是否訓練 Phase 1 (Surrogate)
+    "pretrain": True,            # 是否訓練 Phase 1 (Surrogate)
     "pretrain_physloss": False,   # Phase 1 是否使用 Physical Loss
-    "train_model": "CNN",         # Phase 2 模型架構: 'CNN' or 'MLP'
-    "use_loss": "physical",           # Phase 2 Loss 類型: 'pure', 'physical', 'surrogate'
-    "phys_gradual": False,         # 是否使用漸進式 Loss 引入
-    "data_fraction": 0.1,         # 數據消融測試: 使用 Train+Val 數據的比例 (0.0 ~ 1.0)
-    "surrogate_num": None         # 指定使用的 Surrogate 模型編號 (None = 最新)
+    "train_model": "PaperCNN",         # Phase 2 模型架構: 'CNN' (複雜CNN), 'MLP' (全連接), 'PaperCNN' (極簡CNN)
+    "use_loss": "surrogate",       # Phase 2 Loss 類型: 'pure' (純監督), 'physical' (PDE殘差), 'surrogate' (代理一致性)
+    "phys_gradual": False,        # 是否使用漸進式 Loss 引入
+    "data_fraction": 1,         # 數據消融測試: 使用 Train+Val 數據的比例 (0.0 ~ 1.0)
+    "surrogate_num": None,        # 指定使用的 Surrogate 模型編號 (None = 最新)
+    "surrogate_model": "Paper"    # Surrogate 模型架構: 'Dense' (複雜架構), 'Paper' (極簡架構)
 }
 
 # ============================================================
@@ -122,28 +123,40 @@ def validate_inverse(model, loader, surrogate=None, criterion_phy=None):
 # ============================================================
 # 1. Phase 1 Training
 # ============================================================
-def train_phase1(train_loader, val_loader, use_phys_loss, data_fraction=1.0):
-    print("🚀 [Phase 1] Training Surrogate (Fourier + Histogram)...")
-    wandb.init(project=config.WANDB_PROJECT, name=f"Phase1-Surrogate", reinit=True)
+def train_phase1(train_loader, val_loader, args):
+    print(f"🚀 [Phase 1] Training Surrogate ({args.surrogate_model}) (Fourier + Histogram)...")
+    wandb.init(project=config.WANDB_PROJECT, name=f"Phase1-Surrogate-{args.surrogate_model}", reinit=True)
     
     # Determine Version Number
     surrogate_dir = os.path.join("checkpoint", "surrogate")
     if not os.path.exists(surrogate_dir): os.makedirs(surrogate_dir)
     
-    # Pattern: Surrogate_{pure/phys}_{num}_{wandb_name}.pth
-    loss_tag = "phys" if use_phys_loss else "pure"
-    pattern_regex = r"Surrogate_" + loss_tag + r"_(?P<num>\d+)_.*\.pth"
+    # Pattern: Surrogate_{model}_{pure/phys}_{num}_{wandb_name}.pth
+    loss_tag = "phys" if args.pretrain_physloss else "pure"
+    
+    # Handle naming: If Dense, we can keep old format or use new. Let's use new format for clarity.
+    # But to avoid confusion with old files (Surrogate_pure...), let's use Surrogate_{model}_{loss}...
+    pattern_regex = f"Surrogate_{args.surrogate_model}_{loss_tag}_(?P<num>\\d+)_.*\\.pth"
     current_num = get_next_version(surrogate_dir, pattern_regex)
     
     wandb_name = wandb.run.name if wandb.run.name else "unknown"
     
-    # --- 修改點 1: 在檔名加入 frac 資訊 ---
-    model_filename = f"Surrogate_{loss_tag}_{current_num}_frac{data_fraction}_{wandb_name}.pth"
+    extra_info = ""
+    if args.surrogate_model == 'Paper':
+        extra_info = f"_nk{args.nk}_np{args.np}_nf{args.nf}"
+        
+    model_filename = f"Surrogate_{args.surrogate_model}_{loss_tag}_{current_num}_frac{args.data_fraction}{extra_info}_{wandb_name}.pth"
     final_model_path = os.path.join(surrogate_dir, model_filename)
     
     print(f"📝 Model will be saved as: {model_filename}")
     
-    surrogate = ForwardSurrogate().to(config.DEVICE)
+    if args.surrogate_model == 'Dense':
+        surrogate = ForwardSurrogate().to(config.DEVICE)
+    elif args.surrogate_model == 'Paper':
+        surrogate = PaperSurrogate(nk=args.nk, np_size=args.np, nf=args.nf).to(config.DEVICE)
+    else:
+        raise ValueError(f"Unknown surrogate model: {args.surrogate_model}")
+
     optimizer_S = optim.AdamW(surrogate.parameters(), lr=1e-3, weight_decay=0.01)
     
     total_epochs = 60
@@ -164,17 +177,17 @@ def train_phase1(train_loader, val_loader, use_phys_loss, data_fraction=1.0):
     criterion_hist = HistogramLoss().to(config.DEVICE)
     
     criterion_physics = None
-    if use_phys_loss:
+    if args.pretrain_physloss:
         criterion_physics = PhysicsLoss(dx=config.DX, s_diffusion=config.S_DIFFUSION).to(config.DEVICE)
         print("🔬 Phase 1 Physical Loss enabled")
     
     # GradNorm Setup for Phase 1
     gradnorm = None
     if config.USE_GRADNORM:
-        num_tasks = 3 if use_phys_loss else 2
+        num_tasks = 3 if args.pretrain_physloss else 2
         gradnorm = GradNorm(num_tasks=num_tasks, alpha=1.5, device=config.DEVICE)
         # Initial weights: Fourier=1.0, Hist=1.0, Physics=0.1
-        if use_phys_loss:
+        if args.pretrain_physloss:
             initial_weights = torch.tensor([1.0, 1.0, 0.1], device=config.DEVICE)
         else:
             initial_weights = torch.tensor([1.0, 1.0], device=config.DEVICE)
@@ -279,11 +292,18 @@ def train_phase2(train_loader, val_loader, dataset, args, pretrain_num=None):
         else:
             print("🔗 Using latest Surrogate model")
             
-        pattern_regex = r"Surrogate_.*_(?P<num>\d+)_.*\.pth"
+        # Construct regex based on model type
+        if args.surrogate_model == 'Dense':
+             # Match Surrogate_Dense_... OR Surrogate_pure_... OR Surrogate_phys_... (Legacy support)
+             pattern_regex = r"Surrogate_(?:Dense_)?(?:pure|phys)_(?P<num>\d+)_.*\.pth"
+        else:
+             # Surrogate_Paper_...
+             pattern_regex = f"Surrogate_{args.surrogate_model}_(?:pure|phys)_(?P<num>\\d+)_.*\\.pth"
+
         surrogate_path = find_model_path(ckpt_dir, pattern_regex, version=target_num)
         
         if surrogate_path is None:
-            raise FileNotFoundError(f"❌ Surrogate model not found (Version: {target_num if target_num else 'Latest'}) in {ckpt_dir}")
+            raise FileNotFoundError(f"❌ Surrogate model ({args.surrogate_model}) not found (Version: {target_num if target_num else 'Latest'}) in {ckpt_dir}")
             
         print(f"📂 Loading Surrogate from: {surrogate_path}")
         
@@ -295,7 +315,13 @@ def train_phase2(train_loader, val_loader, dataset, args, pretrain_num=None):
         
         surrogate_num_str = f"-{target_num}"
         
-        surrogate = ForwardSurrogate().to(config.DEVICE)
+        if args.surrogate_model == 'Dense':
+            surrogate = ForwardSurrogate().to(config.DEVICE)
+        elif args.surrogate_model == 'Paper':
+            surrogate = PaperSurrogate(nk=args.nk, np_size=args.np, nf=args.nf).to(config.DEVICE)
+        else:
+            raise ValueError(f"Unknown surrogate model: {args.surrogate_model}")
+            
         surrogate.load_state_dict(torch.load(surrogate_path))
         surrogate.eval()
         for p in surrogate.parameters(): p.requires_grad = False
@@ -306,17 +332,19 @@ def train_phase2(train_loader, val_loader, dataset, args, pretrain_num=None):
         model = ParameterNet().to(config.DEVICE)
     elif args.train_model == 'MLP':
         model = MLPNet().to(config.DEVICE)
+    elif args.train_model == 'PaperCNN':
+        model = PaperCNN(nk=args.nk, np_size=args.np, nf=args.nf).to(config.DEVICE)
     else:
         raise ValueError(f"Unknown model type: {args.train_model}")
 
-    optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0.01)
+    optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     
     total_epochs = config.EPOCHS
     warmup_epochs = int(0.1 * total_epochs)
     cosine_epochs = total_epochs - warmup_epochs
     
     warmup_scheduler = optim.lr_scheduler.LinearLR(
-        optimizer, start_factor=1e-6 / 1e-4, end_factor=1.0, total_iters=warmup_epochs
+        optimizer, start_factor=1e-6 / args.lr, end_factor=1.0, total_iters=warmup_epochs
     )
     cosine_scheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=cosine_epochs, eta_min=1e-6
@@ -354,7 +382,11 @@ def train_phase2(train_loader, val_loader, dataset, args, pretrain_num=None):
     
     # --- 修改點 2: 在檔名加入 frac 資訊 ---
     # 將 frac 放在 num 的後面，避免破壞 get_next_version 的 regex 匹配
-    base_filename = f"{args.train_model}_{loss_type_str}_{current_num}_frac{args.data_fraction}_{wandb_name}"
+    extra_info = ""
+    if args.train_model == 'PaperCNN':
+        extra_info = f"_nk{args.nk}_np{args.np}_nf{args.nf}"
+        
+    base_filename = f"{args.train_model}_{loss_type_str}_{current_num}_frac{args.data_fraction}{extra_info}_{wandb_name}"
     
     best_model_path = os.path.join(ckpt_dir, f"{base_filename}_best.pth")
     final_model_path = os.path.join(ckpt_dir, f"{base_filename}_last.pth")
@@ -463,11 +495,18 @@ def main():
     parser = argparse.ArgumentParser(description="Unified Training Pipeline")
     parser.add_argument('--pretrain', action='store_true', default=DEFAULT_ARGS['pretrain'], help='Train Phase 1 (Surrogate)')
     parser.add_argument('--pretrain-physloss', action='store_true', default=DEFAULT_ARGS['pretrain_physloss'], help='Use physical loss in Phase 1')
-    parser.add_argument('--train-model', type=str, default=DEFAULT_ARGS['train_model'], choices=['CNN', 'MLP'], help='Model architecture for Phase 2')
+    parser.add_argument('--train-model', type=str, default=DEFAULT_ARGS['train_model'], choices=['CNN', 'MLP', 'PaperCNN'], help='Model architecture for Phase 2')
     parser.add_argument('--use-loss', type=str, default=DEFAULT_ARGS['use_loss'], choices=['pure', 'physical', 'surrogate'], help='Loss type for Phase 2')
     parser.add_argument('--phys-gradual', action='store_true', default=DEFAULT_ARGS['phys_gradual'], help='Use gradual introduction for auxiliary loss')
     parser.add_argument('--data-fraction', type=float, default=DEFAULT_ARGS['data_fraction'], help='Fraction of Train+Val data to use (for ablation)')
     parser.add_argument('--surrogate-num', type=int, default=DEFAULT_ARGS['surrogate_num'], help='Surrogate model version to use (Phase 2)')
+    parser.add_argument('--surrogate-model', type=str, default=DEFAULT_ARGS['surrogate_model'], choices=['Dense', 'Paper'], help='Surrogate model architecture')
+    parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate (default: 1e-4)')
+    
+    # Paper CNN specific arguments
+    parser.add_argument('--nk', type=int, default=5, help='Number of kernels for PaperCNN')
+    parser.add_argument('--np', type=int, default=5, help='Kernel size for PaperCNN')
+    parser.add_argument('--nf', type=int, default=5, help='Number of hidden features for PaperCNN')
     
     args = parser.parse_args()
     
@@ -507,8 +546,8 @@ def main():
     
     pretrain_num = None
     if args.pretrain:
-        # --- 修改點 3: 傳入 args.data_fraction ---
-        pretrain_num = train_phase1(train_loader, val_loader, args.pretrain_physloss, args.data_fraction)
+        # --- 修改點 3: 傳入 args ---
+        pretrain_num = train_phase1(train_loader, val_loader, args)
         
     train_phase2(train_loader, val_loader, dataset, args, pretrain_num)
 

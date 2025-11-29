@@ -60,13 +60,14 @@
     *   **功能**：整合了所有訓練模式 (Pure, PINN, Hybrid) 的單一入口。
     *   **主要參數**：
         *   `--pretrain`: 執行 Phase 1 (Surrogate) 訓練。
-        *   `--train-model`: 選擇模型架構 (`CNN` / `MLP`)。
+        *   `--train-model`: 選擇模型架構 (`CNN` / `MLP` / `PaperCNN`)。
         *   `--use-loss`: 選擇 Loss 類型 (`pure`, `physical`, `surrogate`)。
         *   `--phys-gradual`: 啟用漸進式 Loss 引入。
         *   `--data-fraction`: 數據消融測試 (0.0 ~ 1.0)。
         *   `--surrogate-num`: 指定使用的 Surrogate 版本。
+        *   `--surrogate-model`: 選擇 Surrogate 架構 (`Dense` / `Paper`)。
     *   **模型管理**：
-        *   Phase 1 模型存於 `checkpoint/surrogate/`，命名格式 `Surrogate_{type}_{num}_{wandb}.pth`。
+        *   Phase 1 模型存於 `checkpoint/surrogate/`，命名格式 `Surrogate_{model}_{type}_{num}_{wandb}.pth`。
         *   Phase 2 模型存於 `checkpoint/`，命名格式 `{model}_{loss}_{num}_{wandb}_{best/last}.pth`。
     *   **數據分割**：
         *   Step 1: 80% (Train+Val) vs 20% (Test)。
@@ -88,19 +89,34 @@
 
 -----
 
-### 4. 舊版腳本 (Deprecated)
+### 4. 論文復現實驗 (Paper Reproduction)
 
-以下腳本已被 `train.py` 取代，保留僅供參考：
-*   `train_pinn.py`
-*   `train_hybrid.py`
-*   `model/config_pinn.py`
-*   `model/config_hybrid.py`
+本專案亦包含對論文 "Learning System Parameters from Turing Patterns" 中提出的極簡 CNN 架構的復現與改進。
+
+*   **`train_paper_cnn.py` (論文原始架構)**
+    *   **功能**：實作論文中的極簡 CNN 架構 (PaperMinimalCNN)。
+    *   **架構**：`Conv2d` -> `ReLU` -> `Flatten` -> `Linear` -> `ReLU` -> `Linear` -> `Sigmoid`。
+    *   **特點**：參數量極少，旨在驗證極簡模型對圖靈斑紋參數的反演能力。
+    *   **訓練**：使用 MSE Loss 與 Adam 優化器。
+
+*   **`train_paper_pinn.py` (論文架構 + PINN)**
+    *   **功能**：在論文極簡架構基礎上，引入物理約束 (Physics Loss)。
+    *   **改進**：
+        *   加入 **Physics Loss** 以強化物理一致性。
+        *   引入 **Warm-up + Cosine Annealing** 學習率調度，提升訓練穩定性。
+
+> **💡 進階組合 (New!)**：
+> 透過整合後的 `train.py`，您現在可以嘗試 **Paper CNN + Surrogate Loss** 的強大組合！
+> 這結合了極簡架構的泛化優勢與代理模型的高階梯度引導。
+> ```bash
+> python train.py --train-model PaperCNN --use-loss surrogate --lr 1e-3
+> ```
 
 -----
 
 ### 5. 新興方法 (Emerging Approaches)
 
-#### 4.1 圖論電阻距離直方圖特徵 (RDH Features)
+#### 5.1 圖論電阻距離直方圖特徵 (RDH Features)
 
 *   **`FE.py` (圖論特徵提取)**
     *   **功能**：將圖靈斑紋圖像轉換為圖論拓撲特徵。
@@ -110,7 +126,7 @@
     *   **產出**：前12維是RDH特徵向量，用來捕捉圖像的拓撲結構特徵，再加上第1維增強特徵：最大濃度，用來捕捉圖案的絕對濃度資訊。
     *   **應用**：可用於特徵工程、圖像分類或作為傳統機器學習的輸入。
 
-#### 4.2 混合循環訓練架構 (Hybrid Surrogate + Inverse)
+#### 5.2 混合循環訓練架構 (Hybrid Surrogate + Inverse)
 
 *   **`train_hybrid.py` (雙向循環訓練)**
     *   **功能**：通過Forward Surrogate與Inverse CNN的循環一致性訓練，強化物理約束。
@@ -130,6 +146,16 @@
 *   **`GRADUAL_SURROGATE_README.md` (詳細技術文檔)**
     *   **功能**：詳細說明surrogate loss漸進引入的技術實現和優勢。
     *   **內容**：sigmoid調度參數、訓練階段說明、可視化指南、兼容性說明。
+
+-----
+
+### 6. 舊版腳本 (Deprecated)
+
+以下腳本已被 `train.py` 取代，保留僅供參考：
+*   `train_pinn.py`
+*   `train_hybrid.py`
+*   `model/config_pinn.py`
+*   `model/config_hybrid.py`
 
 -----
 
