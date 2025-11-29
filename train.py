@@ -27,7 +27,7 @@ DEFAULT_ARGS = {
     "train_model": "CNN",         # Phase 2 模型架構: 'CNN' or 'MLP'
     "use_loss": "physical",           # Phase 2 Loss 類型: 'pure', 'physical', 'surrogate'
     "phys_gradual": False,         # 是否使用漸進式 Loss 引入
-    "data_fraction": 0.05,         # 數據消融測試: 使用 Train+Val 數據的比例 (0.0 ~ 1.0)
+    "data_fraction": 0.1,         # 數據消融測試: 使用 Train+Val 數據的比例 (0.0 ~ 1.0)
     "surrogate_num": None         # 指定使用的 Surrogate 模型編號 (None = 最新)
 }
 
@@ -328,7 +328,7 @@ def train_phase2(train_loader, val_loader, dataset, args, pretrain_num=None):
     # Loss Functions
     loss_weights = config.LOSS_WEIGHTS
     criterion_phy_surrogate = FourierLoss(radius=0.7).to(config.DEVICE)
-    criterion_phy_pinn = TopKPhysicsLoss(dx=config.DX, s_diffusion=config.S_DIFFUSION).to(config.DEVICE)
+    criterion_phy_pinn = PhysicsLoss(dx=config.DX, s_diffusion=config.S_DIFFUSION).to(config.DEVICE)
     
     # GradNorm Setup
     gradnorm = None
