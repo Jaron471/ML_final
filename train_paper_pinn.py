@@ -1,9 +1,10 @@
 import os
 import argparse
+import random
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split # 引入 random_split
 from tqdm import tqdm
 import numpy as np
 import wandb
@@ -11,16 +12,38 @@ import wandb
 # Import modules
 from model import config
 from model.dataset import TuringDataset
-# 這裡引用最穩定的 PhysicsLoss (3x3)，也可以換成 HighOrder
+# 這裡引用最穩定的 PhysicsLoss (3x3)
 from model.loss import PhysicsLoss 
 from model.utils import calculate_multidim_nrmse, get_next_version
+
+# ==========================================
+# 使用範例:
+# 1. CNN pure (5% data): 
+#    python train_paper_pinn.py --use-loss pure --data-fraction 0.05 --nk 5 --np 5 --nf 5
+#
+# 2. CNN PINN (5% data): 
+#    python train_paper_pinn.py --use-loss physical --data-fraction 0.05 --nk 5 --np 5 --nf 5 --phys-gradual
+# ==========================================
+
+def set_seed(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    elif torch.backends.mps.is_available():
+        torch.mps.manual_seed(seed)
+    print(f"🔒 Random seed set to {seed} (Device: {config.DEVICE})")
+
 
 # ==========================================
 # 1. 定義論文中的極簡 CNN 架構 (保持不變)
 # ==========================================
 class PaperMinimalCNN(nn.Module):
     """
-    [cite_start][cite: 1820-1822] 實作論文中的極簡 CNN (nk/np/nf)
+    [cite: 1820-1822] 實作論文中的極簡 CNN (nk/np/nf)
     """
     def __init__(self, nk=5, np_size=5, nf=5, input_size=128):
         super(PaperMinimalCNN, self).__init__()
@@ -43,13 +66,15 @@ class PaperMinimalCNN(nn.Module):
         return torch.sigmoid(x) # 輸出歸一化參數 [0, 1]
 
 # ==========================================
-# 2. 訓練流程 (加入 PINN + Scheduler)
+# 2. 訓練流程 (加入 PINN + Scheduler + Data Fraction)
 # ==========================================
 def train(args):
-    wandb.init(project=config.WANDB_PROJECT, name=f"Paper-PINN-({args.nk}_{args.np}_{args.nf})-{args.use_loss}", reinit=True)
+    # WandB 名稱加入 fraction 資訊，方便識別
+    wandb.init(project=config.WANDB_PROJECT, name=f"Paper-PINN-({args.nk}_{args.np}_{args.nf})-{args.use_loss}-frac{args.data_fraction}", reinit=True)
     
     print(f"🚀 Training Paper-Style CNN with {args.use_loss} Loss")
     print(f"   Architecture: nk={args.nk}, np={args.np}, nf={args.nf}")
+    print(f"   Data Fraction: {args.data_fraction*100}%")
     
     # 1. Data Setup
     train_set = TuringDataset(config.TRAIN_PATH)
@@ -58,6 +83,19 @@ def train(args):
     dataset = train_set
     dataset.scaler.to_device(config.DEVICE) # 確保 Scaler 在 GPU，計算 Physics Loss 需要
     
+    # 🔥 Data Ablation: 根據 data-fraction 切分訓練集
+    if args.data_fraction < 1.0:
+        total_train = len(train_set)
+        used_size = int(total_train * args.data_fraction)
+        unused_size = total_train - used_size
+        
+        # 使用固定種子切分，確保 Pure 和 PINN 用的是同一組 "5%" 數據
+        train_set, _ = random_split(
+            train_set, [used_size, unused_size], 
+            generator=torch.Generator().manual_seed(42)
+        )
+        print(f"📉 Data Ablation: Using {args.data_fraction:.1%} of Training data ({used_size} samples)")
+    
     train_loader = DataLoader(train_set, batch_size=config.BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(val_set, batch_size=config.BATCH_SIZE, shuffle=False)
     
@@ -65,19 +103,18 @@ def train(args):
     model = PaperMinimalCNN(nk=args.nk, np_size=args.np, nf=args.nf, input_size=128).to(config.DEVICE)
     
     # [cite: 1932] 論文使用 Adam
-    # 但我們會加入 Scheduler 來優化訓練過程
     optimizer = optim.Adam(model.parameters(), lr=1e-3) 
     
-    # 🔥 新增：Scheduler 設定 (與您的主程式對齊)
+    # Scheduler 設定
     total_epochs = config.EPOCHS
     warmup_epochs = int(0.1 * total_epochs) # 前 10% 用來熱身
     cosine_epochs = total_epochs - warmup_epochs
     
-    # 1. Warmup: LR 從 1e-6 升到 1e-3
+    # 1. Warmup
     warmup_scheduler = optim.lr_scheduler.LinearLR(
         optimizer, start_factor=1e-6/1e-3, end_factor=1.0, total_iters=warmup_epochs
     )
-    # 2. Cosine Annealing: LR 慢慢降下來
+    # 2. Cosine Annealing
     cosine_scheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=cosine_epochs, eta_min=1e-6
     )
@@ -95,8 +132,9 @@ def train(args):
     # 4. Save Setup
     ckpt_dir = "checkpoint"
     if not os.path.exists(ckpt_dir): os.makedirs(ckpt_dir)
+    # 檔名加入 fraction
     current_num = get_next_version(ckpt_dir, r"PaperPINN_.*_(?P<num>\d+)_.*\.pth")
-    base_filename = f"PaperPINN_{args.use_loss}_nk{args.nk}_{current_num}"
+    base_filename = f"PaperPINN_{args.use_loss}_nk{args.nk}_frac{args.data_fraction}_{current_num}"
     best_model_path = os.path.join(ckpt_dir, f"{base_filename}_best.pth")
     
     best_nrmse = float('inf')
@@ -116,7 +154,6 @@ def train(args):
             
         progress_bar = tqdm(train_loader, desc=f"Ep {epoch+1} (λ={lambda_val})", leave=False)
         
-        # 🔥 修改 1: 接住 v_batch (Ground Truth V)
         for u_batch, v_batch, params_target in progress_bar:
             u_batch = u_batch.to(config.DEVICE)
             v_batch = v_batch.to(config.DEVICE) 
@@ -148,7 +185,7 @@ def train(args):
                     u_real = u_batch[:, 0:1, :, :]
                     v_real = u_batch[:, 1:2, :, :] 
                 else:
-                    # 🔥 修改 2: 當 Input 只有 1 channel 時，v 從 v_batch 拿
+                    # 當 Input 只有 1 channel 時，v 從 v_batch 拿
                     u_real = u_batch
                     v_real = v_batch 
                 
@@ -163,7 +200,7 @@ def train(args):
             total_sup += loss_sup.item()
             total_phy += loss_phy.item()
         
-        # 🔥 記得更新 Scheduler
+        # 更新 Scheduler
         scheduler.step()
             
         # ==========================
@@ -221,5 +258,17 @@ if __name__ == "__main__":
     parser.add_argument('--lambda-phy', type=float, default=0.01, help='Weight for physics loss')
     parser.add_argument('--phys-gradual', action='store_true', default=True, help='Use warmup for physics loss')
     
+    # 🔥 新增：Data Fraction
+    parser.add_argument('--data-fraction', type=float, default=1.0, help='Fraction of training data to use (e.g., 0.05)')
+    
+    set_seed(42)
     args = parser.parse_args()
     train(args)
+
+
+### 使用方式：
+
+### 1.  **Pure CNN (5% 數據):**
+###    python train_paper_pinn.py --use-loss pure --data-fraction 0.05 --nk 5 --np 5 --nf 5
+### 2.  **PINN (5% 數據):**
+###    python train_paper_pinn.py --use-loss physical --data-fraction 0.05 --nk 5 --np 5 --nf 5 --phys-gradual
