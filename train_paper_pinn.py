@@ -94,7 +94,19 @@ def train(args):
             train_set, [used_size, unused_size], 
             generator=torch.Generator().manual_seed(42)
         )
-        print(f"📉 Data Ablation: Using {args.data_fraction:.1%} of Training data ({used_size} samples)")
+        total_val = len(val_set)
+        used_val_size = int(total_val * args.data_fraction)
+        unused_val_size = total_val - used_val_size
+
+        val_set, _ = random_split(
+            val_set, [used_val_size, unused_val_size],
+            generator=torch.Generator().manual_seed(42) # 用相同種子確保一致性
+        )
+        
+        print(f"📉 Data Ablation ({args.data_fraction:.1%}):")
+        print(f"   Train: {total_train} -> {len(train_set)}")
+        print(f"   Val  : {total_val} -> {len(val_set)}")
+
     
     train_loader = DataLoader(train_set, batch_size=config.BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(val_set, batch_size=config.BATCH_SIZE, shuffle=False)
@@ -130,7 +142,7 @@ def train(args):
     criterion_physics = PhysicsLoss(dx=config.DX, s_diffusion=config.S_DIFFUSION).to(config.DEVICE)
     
     # 4. Save Setup
-    ckpt_dir = "checkpoint"
+    ckpt_dir = "paper_checkpoints"
     if not os.path.exists(ckpt_dir): os.makedirs(ckpt_dir)
     # 檔名加入 fraction
     current_num = get_next_version(ckpt_dir, r"PaperPINN_.*_(?P<num>\d+)_.*\.pth")
@@ -147,11 +159,11 @@ def train(args):
         total_sup = 0
         total_phy = 0
         
-        # Gradual Warmup for Physics Lambda
         lambda_val = args.lambda_phy
+
         if args.phys_gradual and epoch < 20:
             lambda_val = 0.0
-            
+
         progress_bar = tqdm(train_loader, desc=f"Ep {epoch+1} (λ={lambda_val})", leave=False)
         
         for u_batch, v_batch, params_target in progress_bar:
