@@ -73,7 +73,7 @@ def main():
     # ==========================
     # 1. 設定檔案清單與路徑
     # ==========================
-    TEST_PATH = "test.npz"  # 請確認你的測試檔案名稱
+    TEST_PATH = "test_data.npz"  # 請確認你的測試檔案名稱
     CKPT_DIR = "paper_checkpoints" # 模型存放目錄
     
     # 你提供的模型清單
@@ -82,10 +82,12 @@ def main():
         "PaperPINN_physical_nk5_frac0.25_3_best_16.91.pth",
         "PaperPINN_physical_nk5_frac0.125_5_best_18.49.pth",
         "PaperPINN_physical_nk5_frac1.0_7_best_11.72.pth",
+        "PaperPINN_physical_nk5_frac0.0125_9_best_19.50.pth",
         "PaperPINN_pure_nk5_frac0.6_2_best_13.06.pth",
         "PaperPINN_pure_nk5_frac0.25_4_best_17.92.pth",
         "PaperPINN_pure_nk5_frac0.125_6_best_18.68.pth",
-        "PaperPINN_pure_nk5_frac1.0_8_best_11.89.pth"
+        "PaperPINN_pure_nk5_frac1.0_8_best_11.89.pth",
+        "PaperPINN_pure_nk5_frac0.0125_10_best_19.62.pth"
     ]
 
     # ==========================

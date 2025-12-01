@@ -102,7 +102,7 @@ def train(args):
             val_set, [used_val_size, unused_val_size],
             generator=torch.Generator().manual_seed(42) # 用相同種子確保一致性
         )
-        
+
         print(f"📉 Data Ablation ({args.data_fraction:.1%}):")
         print(f"   Train: {total_train} -> {len(train_set)}")
         print(f"   Val  : {total_val} -> {len(val_set)}")
@@ -281,6 +281,6 @@ if __name__ == "__main__":
 ### 使用方式：
 
 ### 1.  **Pure CNN (5% 數據):**
-###    python train_paper_pinn.py --use-loss pure --data-fraction 0.05 --nk 5 --np 5 --nf 5
+###    python train_paper_pinn.py --use-loss pure --data-fraction 0.6 --nk 5 --np 7 --nf 5
 ### 2.  **PINN (5% 數據):**
 ###    python train_paper_pinn.py --use-loss physical --data-fraction 0.05 --nk 5 --np 5 --nf 5 --phys-gradual
