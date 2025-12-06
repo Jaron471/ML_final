@@ -44,27 +44,39 @@ class PaperMinimalCNN(nn.Module):
 # ==========================================
 # 2. 多元評估指標計算函式
 # ==========================================
-def calculate_metrics(targets_norm, preds_norm):
+def calculate_metrics(targets_norm, preds_norm, scaler=None):
     metrics = {}
     param_names = ['a', 'b', 'c', 'delta']
     epsilon = 1e-8
     
+    # 準備物理數值用於計算 MAPE (如果 scaler 存在)
+    if scaler:
+        targets_real = scaler.inverse_transform_numpy(targets_norm)
+        preds_real = scaler.inverse_transform_numpy(preds_norm)
+    else:
+        # 如果沒有 scaler，只好用 normalized 數值 (但不建議用於 MAPE)
+        targets_real = targets_norm
+        preds_real = preds_norm
+
     # 個別參數計算
     for i, name in enumerate(param_names):
         y_true = targets_norm[:, i]
         y_pred = preds_norm[:, i]
         
-        # NRMSE
+        # NRMSE (維持在 Normalized Space，符合論文定義)
         metrics[f'NRMSE_{name}'] = np.sqrt(np.mean((y_true - y_pred)**2))
         
-        # R2 Score
+        # R2 Score (維持在 Normalized Space，R2 是相對指標沒差)
         ss_res = np.sum((y_true - y_pred)**2)
         ss_tot = np.sum((y_true - np.mean(y_true))**2)
         if ss_tot == 0: ss_tot = epsilon
         metrics[f'R2_{name}'] = 1 - (ss_res / ss_tot)
         
-        # MAPE
-        metrics[f'MAPE_{name}'] = np.mean(np.abs((y_true - y_pred) / (y_true + epsilon))) * 100
+        # MAPE (改用 Physical Space)
+        # 使用真實物理數值計算，避免 0 值問題並具有物理意義
+        y_true_real = targets_real[:, i]
+        y_pred_real = preds_real[:, i]
+        metrics[f'MAPE_{name}'] = np.mean(np.abs((y_true_real - y_pred_real) / (y_true_real + epsilon))) * 100
 
     # 整體指標
     # 1. Joint NRMSE
@@ -213,7 +225,9 @@ def main():
         
         all_preds = np.vstack(all_preds)
         all_targets = np.vstack(all_targets)
-        metrics = calculate_metrics(all_targets, all_preds)
+        
+        # 傳入 scaler 以便在內部還原物理數值計算 MAPE
+        metrics = calculate_metrics(all_targets, all_preds, scaler=dataset.scaler)
         
         if frac not in comparison_results: comparison_results[frac] = {}
         comparison_results[frac][model_type] = metrics
