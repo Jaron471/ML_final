@@ -4,33 +4,35 @@ import re
 import torch
 import torch.nn as nn
 import numpy as np
-import pandas as pd  # 用於漂亮的表格輸出
+import pandas as pd
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-# 環境設定
+# ==========================
+# 0. 環境與路徑設定
+# ==========================
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 
-# 引用你的模組
-from model import config
-from model.dataset import TuringDataset
+try:
+    from model import config
+    from model.dataset import TuringDataset
+except ImportError:
+    print("❌ 錯誤: 找不到 'model' 模組。請確保你的專案目錄結構正確。")
+    sys.exit(1)
 
 # ==========================================
-# 1. 定義論文中的極簡 CNN 架構 (必須與訓練時一致)
+# 1. 模型定義
 # ==========================================
 class PaperMinimalCNN(nn.Module):
-    """
-    實作論文中的極簡 CNN (nk/np/nf)
-    """
     def __init__(self, nk=5, np_size=5, nf=5, input_size=128):
         super(PaperMinimalCNN, self).__init__()
         self.conv1 = nn.Conv2d(in_channels=1, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
         out_dim = input_size - np_size + 1
         self.flat_features = nk * out_dim * out_dim
         self.fc1 = nn.Linear(self.flat_features, nf)
-        self.fc_out = nn.Linear(nf, 4) 
+        self.fc_out = nn.Linear(nf, 4)
 
     def forward(self, x):
         x = torch.relu(self.conv1(x))
@@ -40,185 +42,226 @@ class PaperMinimalCNN(nn.Module):
         return torch.sigmoid(x)
 
 # ==========================================
-# 2. 評估指標計算 (符合論文定義)
+# 2. 多元評估指標計算函式
 # ==========================================
 def calculate_metrics(targets_norm, preds_norm):
-    """
-    計算個別參數 NRMSE 與 論文定義的 Joint NRMSE
-    """
     metrics = {}
     param_names = ['a', 'b', 'c', 'delta']
+    epsilon = 1e-8
     
-    # 1. 個別參數 NRMSE (基於正規化數據 [0,1], Range=1, 所以 RMSE=NRMSE)
+    # 個別參數計算
     for i, name in enumerate(param_names):
-        mse = np.mean((targets_norm[:, i] - preds_norm[:, i])**2)
-        rmse = np.sqrt(mse)
-        metrics[f'NRMSE_{name}'] = rmse
+        y_true = targets_norm[:, i]
+        y_pred = preds_norm[:, i]
+        
+        # NRMSE
+        metrics[f'NRMSE_{name}'] = np.sqrt(np.mean((y_true - y_pred)**2))
+        
+        # R2 Score
+        ss_res = np.sum((y_true - y_pred)**2)
+        ss_tot = np.sum((y_true - np.mean(y_true))**2)
+        if ss_tot == 0: ss_tot = epsilon
+        metrics[f'R2_{name}'] = 1 - (ss_res / ss_tot)
+        
+        # MAPE
+        metrics[f'MAPE_{name}'] = np.mean(np.abs((y_true - y_pred) / (y_true + epsilon))) * 100
 
-    # 2. Joint NRMSE (Paper Definition )
-    # 公式: RMSE_total / || mean(y_target) ||
+    # 整體指標
+    # 1. Joint NRMSE
     num_elements = targets_norm.size
     total_sse = np.sum((targets_norm - preds_norm)**2)
     global_rmse = np.sqrt(total_sse / num_elements)
-    
-    # 分母：目標向量平均值的歐幾里得範數
     y_mean_vec = np.mean(targets_norm, axis=0)
     norm_y_mean = np.linalg.norm(y_mean_vec)
-    
     metrics['NRMSE_Joint'] = global_rmse / norm_y_mean if norm_y_mean != 0 else 0.0
+
+    # 2. Mean R2
+    metrics['R2_Mean'] = np.mean([metrics[f'R2_{n}'] for n in param_names])
     
+    # 3. Mean MAPE
+    metrics['MAPE_Mean'] = np.mean([metrics[f'MAPE_{n}'] for n in param_names])
+    
+    # 4. Max Error
+    metrics['Max_Error'] = np.max(np.abs(targets_norm - preds_norm))
+
     return metrics
 
-def main():
-    # ==========================
-    # 1. 設定檔案清單與路徑
-    # ==========================
-    TEST_PATH = "test_data.npz"  # 請確認你的測試檔案名稱
-    CKPT_DIR = "paper_checkpoints" # 模型存放目錄
+# ==========================================
+# 3. 輔助函式：生成單一指標報表
+# ==========================================
+def generate_metric_report(comparison_results, metric_key, title, unit="", higher_is_better=False):
+    """
+    通用報表生成器
+    """
+    print("\n" + "="*80)
+    print(f"📊 {title}")
+    print("="*80)
     
-    # 你提供的模型清單
+    table_data = []
+    
+    for frac in sorted(comparison_results.keys(), reverse=True):
+        res = comparison_results[frac]
+        pure_val = res.get('pure', {}).get(metric_key, np.nan)
+        phys_val = res.get('physical', {}).get(metric_key, np.nan)
+        
+        row = {'Data %': f"{frac:.1%}"}
+        
+        # 格式化數值
+        if unit == "%":
+            # NRMSE 等本來就是小數，需要轉百分比顯示
+            # 但如果 metric 本身已经是百分比(如MAPE)，則直接顯示
+            # 這裡假設 NRMSE_Joint 是小數，需要 :.2%
+            # MAPE_Mean 是數值(0-100)，需要 :.2f
+            if "NRMSE" in metric_key:
+                row['Pure'] = f"{pure_val:.2%}" if not np.isnan(pure_val) else "-"
+                row['Phys'] = f"{phys_val:.2%}" if not np.isnan(phys_val) else "-"
+            else:
+                row['Pure'] = f"{pure_val:.2f}" if not np.isnan(pure_val) else "-"
+                row['Phys'] = f"{phys_val:.2f}" if not np.isnan(phys_val) else "-"
+        else:
+            row['Pure'] = f"{pure_val:.4f}" if not np.isnan(pure_val) else "-"
+            row['Phys'] = f"{phys_val:.4f}" if not np.isnan(phys_val) else "-"
+            
+        # 計算差異與勝負
+        if not np.isnan(pure_val) and not np.isnan(phys_val):
+            if higher_is_better:
+                # 如 R2: 越高越好，差異 = Phys - Pure
+                diff = phys_val - pure_val
+                row['Diff'] = f"{diff:+.4f}"
+                row['Winner'] = "Physical 🟢" if diff > 0 else "Pure 🔴"
+            else:
+                # 如 Error: 越低越好，改善率 = (Pure - Phys) / Pure
+                diff = pure_val - phys_val
+                imp = (diff / pure_val) * 100
+                row['Imp(%)'] = f"{imp:+.2f}%"
+                row['Winner'] = "Physical 🟢" if diff > 0 else "Pure 🔴"
+        else:
+            row['Diff/Imp'] = "-"
+            row['Winner'] = "-"
+            
+        table_data.append(row)
+        
+    df = pd.DataFrame(table_data)
+    print(df.to_string(index=False))
+
+# ==========================================
+# 4. 主程式流程
+# ==========================================
+def main():
+    TEST_PATH = "test_data.npz"
+    CKPT_DIR = "paper_checkpoints"
+    
     model_files = [
+        "PaperPINN_physical_nk5_frac1.0_7_best_11.72.pth",
         "PaperPINN_physical_nk5_frac0.6_1_best_12.88.pth",
         "PaperPINN_physical_nk5_frac0.25_3_best_16.91.pth",
+        "PaperPINN_physical_nk5_frac0.1875_16_best_16.62.pth",
         "PaperPINN_physical_nk5_frac0.125_5_best_18.49.pth",
-        "PaperPINN_physical_nk5_frac1.0_7_best_11.72.pth",
         "PaperPINN_physical_nk5_frac0.0125_9_best_19.50.pth",
+        "PaperPINN_pure_nk5_frac1.0_8_best_11.89.pth",
         "PaperPINN_pure_nk5_frac0.6_2_best_13.06.pth",
         "PaperPINN_pure_nk5_frac0.25_4_best_17.92.pth",
+        "PaperPINN_pure_nk5_frac0.1875_17_best_18.55.pth",
         "PaperPINN_pure_nk5_frac0.125_6_best_18.68.pth",
-        "PaperPINN_pure_nk5_frac1.0_8_best_11.89.pth",
-        "PaperPINN_pure_nk5_frac0.0125_10_best_19.62.pth"
+        "PaperPINN_pure_nk5_frac0.0125_10_best_19.62.pth",
     ]
 
-    # ==========================
-    # 2. 載入測試資料
-    # ==========================
     print(f"📦 Loading Test Data from: {TEST_PATH}")
     if not os.path.exists(TEST_PATH):
-        print(f"❌ Error: {TEST_PATH} not found. Trying config.NPZ_PATH...")
-        TEST_PATH = config.NPZ_PATH
-        
+        if hasattr(config, 'NPZ_PATH') and os.path.exists(config.NPZ_PATH):
+            TEST_PATH = config.NPZ_PATH
+        else:
+            print(f"❌ Error: Cannot find test data file.")
+            return
+            
     dataset = TuringDataset(TEST_PATH)
     loader = DataLoader(dataset, batch_size=config.BATCH_SIZE, shuffle=False)
-    print(f"📊 Test Set Size: {len(dataset)}")
-
-    # 用於儲存結果的字典: results[frac][type] = metrics
+    
     comparison_results = {}
 
-    # ==========================
-    # 3. 批量評估迴圈
-    # ==========================
-    print("\n🚀 Starting Batch Evaluation...")
+    print("\n🚀 Starting Evaluation...")
     
+    # --- 推論迴圈 ---
     for filename in model_files:
         filepath = os.path.join(CKPT_DIR, filename)
-        if not os.path.exists(filepath):
-            # 嘗試在當前目錄尋找
-            filepath = filename
-            if not os.path.exists(filepath):
-                print(f"⚠️  Skipping missing file: {filename}")
-                continue
+        if not os.path.exists(filepath): 
+            if os.path.exists(filename): filepath = filename
+            else: continue
 
-        # 解析檔名資訊 (Regex)
-        # 格式: PaperPINN_{type}_nk5_frac{frac}_...
         match = re.search(r'PaperPINN_(?P<type>[a-zA-Z]+)_nk5_frac(?P<frac>[\d\.]+)_', filename)
-        if not match:
-            print(f"⚠️  Cannot parse filename info: {filename}")
-            continue
+        if not match: continue
             
-        model_type = match.group('type') # physical / pure
+        model_type = match.group('type')
         frac = float(match.group('frac'))
         
-        print(f"\n🔍 Evaluating: {filename}")
-        print(f"   Type: {model_type}, Fraction: {frac}")
+        # print(f"Processing {model_type} | Frac: {frac}") # 除錯用
 
-        # 初始化模型 (nk=5, np=5, nf=5)
         model = PaperMinimalCNN(nk=5, np_size=5, nf=5).to(config.DEVICE)
-        
-        # 載入權重
         try:
             model.load_state_dict(torch.load(filepath, map_location=config.DEVICE))
-        except Exception as e:
-            print(f"❌ Load failed: {e}")
-            continue
-            
+        except: continue
         model.eval()
 
-        # 推論
-        all_preds = []
-        all_targets = []
-        
+        all_preds, all_targets = [], []
         with torch.no_grad():
             for u_batch, _, params_target in loader:
                 u_batch = u_batch.to(config.DEVICE)
-                
-                # 處理輸入 Channel
-                if u_batch.shape[1] > 1:
-                    u_input = u_batch[:, 0:1, :, :]
-                else:
-                    u_input = u_batch
-                
+                u_input = u_batch[:, 0:1, :, :] if u_batch.shape[1] > 1 else u_batch
                 preds = model(u_input)
-                
                 all_preds.append(preds.cpu().numpy())
                 all_targets.append(params_target.numpy())
         
         all_preds = np.vstack(all_preds)
         all_targets = np.vstack(all_targets)
-
-        # 計算指標
         metrics = calculate_metrics(all_targets, all_preds)
         
-        # 儲存結果
-        if frac not in comparison_results:
-            comparison_results[frac] = {}
+        if frac not in comparison_results: comparison_results[frac] = {}
         comparison_results[frac][model_type] = metrics
-        
-        # 印出單一模型結果
-        print(f"   Joint NRMSE: {metrics['NRMSE_Joint']:.2%}")
-        print(f"   Per-param NRMSE: a={metrics['NRMSE_a']:.2%}, b={metrics['NRMSE_b']:.2%}, c={metrics['NRMSE_c']:.2%}, δ={metrics['NRMSE_delta']:.2%}")
 
-    # ==========================
-    # 4. 生成比較報表
-    # ==========================
-    print("\n" + "="*80)
-    print("🏆 FINAL COMPARISON REPORT: Pure vs. Physical (PINN)")
-    print("="*80)
+    # --- 4. 生成多個獨立報表 ---
     
-    # 準備 DataFrame 資料
-    table_data = []
-    
-    # 依資料比例排序 (大 -> 小)
-    for frac in sorted(comparison_results.keys(), reverse=True):
-        row = {'Data Fraction': f"{frac:.1%}"}
-        
-        res = comparison_results[frac]
-        
-        # 取得 Joint NRMSE
-        pure_score = res.get('pure', {}).get('NRMSE_Joint', np.nan)
-        phys_score = res.get('physical', {}).get('NRMSE_Joint', np.nan)
-        
-        row['Pure NRMSE'] = f"{pure_score:.2%}" if not np.isnan(pure_score) else "N/A"
-        row['Physical NRMSE'] = f"{phys_score:.2%}" if not np.isnan(phys_score) else "N/A"
-        
-        # 計算差異
-        if not np.isnan(pure_score) and not np.isnan(phys_score):
-            diff = pure_score - phys_score
-            # 正值代表 Physical 比較好 (Pure 誤差較大)
-            improvement = (diff / pure_score) * 100
-            row['Improvement'] = f"{improvement:+.2f}%"
-            row['Winner'] = "Physical 🟢" if diff > 0 else "Pure 🔴"
-        else:
-            row['Improvement'] = "-"
-            row['Winner'] = "-"
-            
-        table_data.append(row)
+    print("\n" + "#"*80)
+    print("🏆 FINAL COMPARISON REPORT (Per Metric)")
+    print("#"*80)
 
-    # 輸出表格
-    df = pd.DataFrame(table_data)
-    print(df.to_string(index=False))
-    print("="*80)
-    print("註: 'Improvement' 為正值代表 Physical (PINN) 誤差較小，效能較好。")
+    # 1. NRMSE Table (越低越好)
+    generate_metric_report(
+        comparison_results, 
+        metric_key='NRMSE_Joint', 
+        title="Joint NRMSE Comparison (Lower is Better)", 
+        unit="%", 
+        higher_is_better=False
+    )
+
+    # 2. R2 Score Table (越高越好)
+    generate_metric_report(
+        comparison_results, 
+        metric_key='R2_Mean', 
+        title="Mean R² Score Comparison (Higher is Better)", 
+        unit="", 
+        higher_is_better=True
+    )
+
+    # 3. MAPE Table (越低越好)
+    generate_metric_report(
+        comparison_results, 
+        metric_key='MAPE_Mean', 
+        title="Mean MAPE Comparison (Lower is Better)", 
+        unit="%", 
+        higher_is_better=False
+    )
+
+    # 4. Max Error Table (越低越好)
+    generate_metric_report(
+        comparison_results, 
+        metric_key='Max_Error', 
+        title="Max Error Comparison (Lower is Better - Worst Case)", 
+        unit="", 
+        higher_is_better=False
+    )
+
+    print("\n" + "#"*80)
+    print("Done.")
 
 if __name__ == "__main__":
     main()
