@@ -64,15 +64,74 @@ class PaperMinimalCNN(nn.Module):
         x = torch.relu(self.fc1(x))
         x = self.fc_out(x)
         return torch.sigmoid(x) # 輸出歸一化參數 [0, 1]
+    
+class PaperMinimalCNN2(nn.Module):
+    def __init__(self, nk=5, np_size=5, nf=5, input_size=128):
+        super(PaperMinimalCNN2, self).__init__()
+        
+        # [cite: 1936] 輸入固定為 1 Channel (只看 u)
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
+        self.conv2 = nn.Conv2d(in_channels=nk, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
+        
+        out_dim = input_size - 2 * np_size + 2
+        self.flat_features = nk * out_dim * out_dim
+        
+        self.fc1 = nn.Linear(self.flat_features, nf)
+        self.fc_out = nn.Linear(nf, 4) 
+
+    def forward(self, x):
+        # x shape: (Batch, 1, 128, 128)
+        x = torch.relu(self.conv1(x))
+        x = torch.relu(self.conv2(x))
+        x = x.view(x.size(0), -1) # Flatten
+        x = torch.relu(self.fc1(x))
+        x = self.fc_out(x)
+        return torch.sigmoid(x) # 輸出歸一化參數 [0, 1]
+
+class PaperMinimalCNN2MaxPool(nn.Module):
+    def __init__(self, nk=5, np_size=5, nf=5, input_size=128):
+        super(PaperMinimalCNN2MaxPool, self).__init__()
+        
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
+        
+        self.conv2 = nn.Conv2d(in_channels=nk, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
+        
+        # Calculate output dimension
+        # After Conv1
+        d1 = input_size - np_size + 1
+        # After Pool1
+        d2 = d1 // 2
+        # After Conv2
+        d3 = d2 - np_size + 1
+        # After Pool2
+        d4 = d3 // 2
+        
+        self.flat_features = nk * d4 * d4
+        
+        self.fc1 = nn.Linear(self.flat_features, nf)
+        self.fc_out = nn.Linear(nf, 4) 
+
+    def forward(self, x):
+        x = torch.relu(self.conv1(x))
+        x = self.pool1(x)
+        x = torch.relu(self.conv2(x))
+        x = self.pool2(x)
+        x = x.view(x.size(0), -1)
+        x = torch.relu(self.fc1(x))
+        x = self.fc_out(x)
+        return torch.sigmoid(x)
 
 # ==========================================
 # 2. 訓練流程 (加入 PINN + Scheduler + Data Fraction)
 # ==========================================
 def train(args):
     # WandB 名稱加入 fraction 資訊，方便識別
-    wandb.init(project=config.WANDB_PROJECT, name=f"Paper-PINN-({args.nk}_{args.np}_{args.nf})-{args.use_loss}-frac{args.data_fraction}", reinit=True)
+    wandb.init(project=config.WANDB_PROJECT, name=f"Paper-PINN-{args.model_type}-({args.nk}_{args.np}_{args.nf})-{args.use_loss}-frac{args.data_fraction}", reinit=True)
     
     print(f"🚀 Training Paper-Style CNN with {args.use_loss} Loss")
+    print(f"   Model Type: {args.model_type}")
     print(f"   Architecture: nk={args.nk}, np={args.np}, nf={args.nf}")
     print(f"   Data Fraction: {args.data_fraction*100}%")
     
@@ -112,7 +171,14 @@ def train(args):
     val_loader = DataLoader(val_set, batch_size=config.BATCH_SIZE, shuffle=False)
     
     # 2. Model Setup
-    model = PaperMinimalCNN(nk=args.nk, np_size=args.np, nf=args.nf, input_size=128).to(config.DEVICE)
+    if args.model_type == 'cnn1':
+        model = PaperMinimalCNN(nk=args.nk, np_size=args.np, nf=args.nf, input_size=128).to(config.DEVICE)
+    elif args.model_type == 'cnn2':
+        model = PaperMinimalCNN2(nk=args.nk, np_size=args.np, nf=args.nf, input_size=128).to(config.DEVICE)
+    elif args.model_type == 'cnn2pool':
+        model = PaperMinimalCNN2MaxPool(nk=args.nk, np_size=args.np, nf=args.nf, input_size=128).to(config.DEVICE)
+    else:
+        raise ValueError(f"Unknown model type: {args.model_type}")
     
     # [cite: 1932] 論文使用 Adam
     optimizer = optim.Adam(model.parameters(), lr=1e-3) 
@@ -146,7 +212,7 @@ def train(args):
     if not os.path.exists(ckpt_dir): os.makedirs(ckpt_dir)
     # 檔名加入 fraction
     current_num = get_next_version(ckpt_dir, r"PaperPINN_.*_(?P<num>\d+)_.*\.pth")
-    base_filename = f"PaperPINN_{args.use_loss}_nk{args.nk}_frac{args.data_fraction}_{current_num}"
+    base_filename = f"PaperPINN_{args.model_type}_{args.use_loss}_nk{args.nk}_frac{args.data_fraction}_{current_num}"
     best_model_path = os.path.join(ckpt_dir, f"{base_filename}_best.pth")
     
     best_nrmse = float('inf')
@@ -261,6 +327,7 @@ def train(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # 模型參數
+    parser.add_argument('--model-type', type=str, default='cnn2', choices=['cnn1', 'cnn2', 'cnn2pool'], help='Model architecture: cnn1 (original), cnn2 (2 layers), cnn2pool (2 layers + maxpool)')
     parser.add_argument('--nk', type=int, default=5, help='Number of kernels')
     parser.add_argument('--np', type=int, default=5, help='Kernel size')
     parser.add_argument('--nf', type=int, default=5, help='Hidden neurons')
@@ -271,7 +338,7 @@ if __name__ == "__main__":
     parser.add_argument('--phys-gradual', action='store_true', default=True, help='Use warmup for physics loss')
     
     # 🔥 新增：Data Fraction
-    parser.add_argument('--data-fraction', type=float, default=1.0, help='Fraction of training data to use (e.g., 0.05)')
+    parser.add_argument('--data-fraction', type=float, default=0.0125, help='Fraction of training data to use (e.g., 0.05)')
     
     set_seed(42)
     args = parser.parse_args()

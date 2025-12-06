@@ -41,6 +41,52 @@ class PaperMinimalCNN(nn.Module):
         x = self.fc_out(x)
         return torch.sigmoid(x)
 
+class PaperMinimalCNN2(nn.Module):
+    def __init__(self, nk=5, np_size=5, nf=5, input_size=128):
+        super(PaperMinimalCNN2, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
+        self.conv2 = nn.Conv2d(in_channels=nk, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
+        out_dim = input_size - 2 * np_size + 2
+        self.flat_features = nk * out_dim * out_dim
+        self.fc1 = nn.Linear(self.flat_features, nf)
+        self.fc_out = nn.Linear(nf, 4) 
+
+    def forward(self, x):
+        x = torch.relu(self.conv1(x))
+        x = torch.relu(self.conv2(x))
+        x = x.view(x.size(0), -1)
+        x = torch.relu(self.fc1(x))
+        x = self.fc_out(x)
+        return torch.sigmoid(x)
+
+class PaperMinimalCNN2MaxPool(nn.Module):
+    def __init__(self, nk=5, np_size=5, nf=5, input_size=128):
+        super(PaperMinimalCNN2MaxPool, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.conv2 = nn.Conv2d(in_channels=nk, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
+        
+        # Calculate output dimension
+        d1 = input_size - np_size + 1
+        d2 = d1 // 2
+        d3 = d2 - np_size + 1
+        d4 = d3 // 2
+        self.flat_features = nk * d4 * d4
+        
+        self.fc1 = nn.Linear(self.flat_features, nf)
+        self.fc_out = nn.Linear(nf, 4) 
+
+    def forward(self, x):
+        x = torch.relu(self.conv1(x))
+        x = self.pool1(x)
+        x = torch.relu(self.conv2(x))
+        x = self.pool2(x)
+        x = x.view(x.size(0), -1)
+        x = torch.relu(self.fc1(x))
+        x = self.fc_out(x)
+        return torch.sigmoid(x)
+
 # ==========================================
 # 2. 多元評估指標計算函式
 # ==========================================
@@ -189,29 +235,50 @@ def main():
     dataset = TuringDataset(TEST_PATH)
     loader = DataLoader(dataset, batch_size=config.BATCH_SIZE, shuffle=False)
     
+    # Structure: results[model_arch][frac][loss_type] = metrics
     comparison_results = {}
 
     print("\n🚀 Starting Evaluation...")
     
-    # --- 推論迴圈 ---
-    for filename in model_files:
+    for filename in sorted(model_files):
         filepath = os.path.join(CKPT_DIR, filename)
-        if not os.path.exists(filepath): 
-            if os.path.exists(filename): filepath = filename
-            else: continue
-
-        match = re.search(r'PaperPINN_(?P<type>[a-zA-Z]+)_nk5_frac(?P<frac>[\d\.]+)_', filename)
-        if not match: continue
-            
-        model_type = match.group('type')
-        frac = float(match.group('frac'))
         
-        # print(f"Processing {model_type} | Frac: {frac}") # 除錯用
+        # Try new format first: PaperPINN_{model_type}_{loss_type}_nk...
+        match_new = re.search(r'PaperPINN_(?P<model>[a-zA-Z0-9]+)_(?P<loss>pure|physical)_nk(?P<nk>\d+)_frac(?P<frac>[\d\.]+)_', filename)
+        
+        # Try old format: PaperPINN_{loss_type}_nk...
+        match_old = re.search(r'PaperPINN_(?P<loss>pure|physical)_nk(?P<nk>\d+)_frac(?P<frac>[\d\.]+)_', filename)
+        
+        if match_new:
+            model_arch = match_new.group('model')
+            loss_type = match_new.group('loss')
+            frac = float(match_new.group('frac'))
+        elif match_old:
+            model_arch = 'cnn1' # Default to original
+            loss_type = match_old.group('loss')
+            frac = float(match_old.group('frac'))
+        else:
+            continue
+            
+        print(f"Processing: {filename} -> Arch: {model_arch}, Loss: {loss_type}, Frac: {frac}")
 
-        model = PaperMinimalCNN(nk=5, np_size=5, nf=5).to(config.DEVICE)
+        # Instantiate correct model
+        if model_arch == 'cnn1':
+            model = PaperMinimalCNN(nk=5, np_size=5, nf=5).to(config.DEVICE)
+        elif model_arch == 'cnn2':
+            model = PaperMinimalCNN2(nk=5, np_size=5, nf=5).to(config.DEVICE)
+        elif model_arch == 'cnn2pool':
+            model = PaperMinimalCNN2MaxPool(nk=5, np_size=5, nf=5).to(config.DEVICE)
+        else:
+            print(f"⚠️ Unknown model architecture: {model_arch}, skipping.")
+            continue
+
         try:
             model.load_state_dict(torch.load(filepath, map_location=config.DEVICE))
-        except: continue
+        except Exception as e:
+            print(f"❌ Failed to load {filename}: {e}")
+            continue
+            
         model.eval()
 
         all_preds, all_targets = [], []
@@ -226,53 +293,44 @@ def main():
         all_preds = np.vstack(all_preds)
         all_targets = np.vstack(all_targets)
         
-        # 傳入 scaler 以便在內部還原物理數值計算 MAPE
         metrics = calculate_metrics(all_targets, all_preds, scaler=dataset.scaler)
         
-        if frac not in comparison_results: comparison_results[frac] = {}
-        comparison_results[frac][model_type] = metrics
+        if model_arch not in comparison_results: comparison_results[model_arch] = {}
+        if frac not in comparison_results[model_arch]: comparison_results[model_arch][frac] = {}
+        comparison_results[model_arch][frac][loss_type] = metrics
 
-    # --- 4. 生成多個獨立報表 ---
-    
-    print("\n" + "#"*80)
-    print("🏆 FINAL COMPARISON REPORT (Per Metric)")
-    print("#"*80)
+    # Generate reports for each model architecture
+    for model_arch, results in comparison_results.items():
+        print("\n" + "#"*80)
+        print(f"🏆 FINAL COMPARISON REPORT: {model_arch}")
+        print("#"*80)
 
-    # 1. NRMSE Table (越低越好)
-    generate_metric_report(
-        comparison_results, 
-        metric_key='NRMSE_Joint', 
-        title="Joint NRMSE Comparison (Lower is Better)", 
-        unit="%", 
-        higher_is_better=False
-    )
+        # 1. NRMSE Table
+        generate_metric_report(
+            results, 
+            metric_key='NRMSE_Joint', 
+            title=f"[{model_arch}] Joint NRMSE Comparison (Lower is Better)", 
+            unit="%", 
+            higher_is_better=False
+        )
 
-    # 2. R2 Score Table (越高越好)
-    generate_metric_report(
-        comparison_results, 
-        metric_key='R2_Mean', 
-        title="Mean R² Score Comparison (Higher is Better)", 
-        unit="", 
-        higher_is_better=True
-    )
-
-    # 3. MAPE Table (越低越好)
-    generate_metric_report(
-        comparison_results, 
-        metric_key='MAPE_Mean', 
-        title="Mean MAPE Comparison (Lower is Better)", 
-        unit="%", 
-        higher_is_better=False
-    )
-
-    # 4. Max Error Table (越低越好)
-    generate_metric_report(
-        comparison_results, 
-        metric_key='Max_Error', 
-        title="Max Error Comparison (Lower is Better - Worst Case)", 
-        unit="", 
-        higher_is_better=False
-    )
+        # 2. R2 Score Table
+        generate_metric_report(
+            results, 
+            metric_key='R2_Mean', 
+            title=f"[{model_arch}] Mean R² Score Comparison (Higher is Better)", 
+            unit="", 
+            higher_is_better=True
+        )
+        
+        # 3. MAPE Table
+        generate_metric_report(
+            results, 
+            metric_key='MAPE_Mean', 
+            title=f"[{model_arch}] Mean MAPE Comparison (Lower is Better)", 
+            unit="%", 
+            higher_is_better=False
+        )
 
     print("\n" + "#"*80)
     print("Done.")
