@@ -123,6 +123,32 @@ class PaperMinimalCNN2MaxPool(nn.Module):
         x = self.fc_out(x)
         return torch.sigmoid(x)
 
+class PaperMinimalCNN2Stride(nn.Module):
+    def __init__(self, nk=5, np_size=5, nf=5, input_size=128):
+        super(PaperMinimalCNN2Stride, self).__init__()
+        
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=nk, kernel_size=np_size, stride=2, padding=0)
+        self.conv2 = nn.Conv2d(in_channels=nk, out_channels=nk, kernel_size=np_size, stride=2, padding=0)
+        
+        # Calculate output dimension
+        # After Conv1 (stride 2)
+        d1 = (input_size - np_size) // 2 + 1
+        # After Conv2 (stride 2)
+        d2 = (d1 - np_size) // 2 + 1
+        
+        self.flat_features = nk * d2 * d2
+        
+        self.fc1 = nn.Linear(self.flat_features, nf)
+        self.fc_out = nn.Linear(nf, 4) 
+
+    def forward(self, x):
+        x = torch.relu(self.conv1(x))
+        x = torch.relu(self.conv2(x))
+        x = x.view(x.size(0), -1)
+        x = torch.relu(self.fc1(x))
+        x = self.fc_out(x)
+        return torch.sigmoid(x)
+
 # ==========================================
 # 2. 訓練流程 (加入 PINN + Scheduler + Data Fraction)
 # ==========================================
@@ -177,6 +203,8 @@ def train(args):
         model = PaperMinimalCNN2(nk=args.nk, np_size=args.np, nf=args.nf, input_size=128).to(config.DEVICE)
     elif args.model_type == 'cnn2pool':
         model = PaperMinimalCNN2MaxPool(nk=args.nk, np_size=args.np, nf=args.nf, input_size=128).to(config.DEVICE)
+    elif args.model_type == 'cnn2stride':
+        model = PaperMinimalCNN2Stride(nk=args.nk, np_size=args.np, nf=args.nf, input_size=128).to(config.DEVICE)
     else:
         raise ValueError(f"Unknown model type: {args.model_type}")
     
@@ -327,18 +355,18 @@ def train(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # 模型參數
-    parser.add_argument('--model-type', type=str, default='cnn2', choices=['cnn1', 'cnn2', 'cnn2pool'], help='Model architecture: cnn1 (original), cnn2 (2 layers), cnn2pool (2 layers + maxpool)')
+    parser.add_argument('--model-type', type=str, default='cnn2', choices=['cnn1', 'cnn2', 'cnn2pool', 'cnn2stride'], help='Model architecture: cnn1 (original), cnn2 (2 layers), cnn2pool (2 layers + maxpool), cnn2stride (2 layers + stride)')
     parser.add_argument('--nk', type=int, default=5, help='Number of kernels')
     parser.add_argument('--np', type=int, default=5, help='Kernel size')
     parser.add_argument('--nf', type=int, default=5, help='Hidden neurons')
     
     # PINN 參數
-    parser.add_argument('--use-loss', type=str, default='physical', choices=['pure', 'physical'])
+    parser.add_argument('--use-loss', type=str, default='pure', choices=['pure', 'physical'])
     parser.add_argument('--lambda-phy', type=float, default=0.01, help='Weight for physics loss')
     parser.add_argument('--phys-gradual', action='store_true', default=True, help='Use warmup for physics loss')
     
     # 🔥 新增：Data Fraction
-    parser.add_argument('--data-fraction', type=float, default=0.0125, help='Fraction of training data to use (e.g., 0.05)')
+    parser.add_argument('--data-fraction', type=float, default=0.25, help='Fraction of training data to use (e.g., 0.05)')
     
     set_seed(42)
     args = parser.parse_args()
