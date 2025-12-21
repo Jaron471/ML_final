@@ -14,9 +14,9 @@
 
 ---
 
-## 1. 專案你會用到什麼
+## 1. 專案
 
-### 我做了什麼（訓練流程統整）
+### 訓練流程統整
 
 在 [train_unified.py](train_unified.py) 中，我把「資料載入、模型建立、optimizer/scheduler、loss 設計、存檔與 WandB 記錄」整合成一條一致的 pipeline：
 
@@ -46,7 +46,6 @@
 		 - **Masked Physics Loss**：只在 `u > mean(u)` 的斑紋區域計算殘差，避免背景噪聲稀釋梯度
 	 - Physics loss 權重：`loss = loss_sup + λ * loss_phy`
 		 - `λ` 由 `--lambda-phy` 指定，且可用 `--phys-gradual` 做 gradual / warmup（CNN: epoch 20 step；MLP: epoch 20→60 sigmoid warmup）。
-	 - （選配）GradNorm：在 MLP + physical 且 `config.USE_GRADNORM=True` 時會啟用，用於動態調整 supervised/physics 權重。
 
 5. **Checkpoint 存檔**
 	 - 預設輸出到資料夾 `paper_checkpoints/`
@@ -59,7 +58,7 @@
 
 6. **評估指標**
 	 - training / validation 主要看 `NRMSE`（normalized space, multi-dim joint）
-	 - [verify_comparison.py](verify_comparison.py) 會輸出更多表格：NRMSE / R² / MAPE / Max Error
+	 - [verify_comparison.py](verify_comparison.py) 會輸出更多表格：NRMSE / R²
 
 ---
 
@@ -143,16 +142,16 @@ python download_checkpoints.py
 
 ### 6.1 最常用指令（快速開始）
 
-1) CNN2 + Pure（25% data）
+1) CNN1 + Pure（25% data）
 
 ```bash
-python train_unified.py --model-arch cnn2 --use-loss pure --data-fraction 0.25 --nk 5 --np 5 --nf 5
+python train_unified.py --model-arch cnn1 --use-loss pure --data-fraction 0.25 --nk 5 --np 5 --nf 5
 ```
 
-2) CNN2 + Physical（25% data）
+2) CNN1 + Physical（25% data）
 
 ```bash
-python train_unified.py --model-arch cnn2 --use-loss physical --data-fraction 0.25 --nk 5 --np 5 --nf 5 --phys-gradual
+python train_unified.py --model-arch cnn1 --use-loss physical --data-fraction 0.25 --nk 5 --np 5 --nf 5 --phys-gradual
 ```
 
 3) MLP + Pure（10% data）
