@@ -287,7 +287,7 @@ def train(args):
     loss_weights = config.LOSS_WEIGHTS if args.model_arch == 'mlp' else None
     
     # 6. Save Setup
-    ckpt_dir = "checkpoint"
+    ckpt_dir = "paper_checkpoints"
     if not os.path.exists(ckpt_dir): 
         os.makedirs(ckpt_dir)
     
