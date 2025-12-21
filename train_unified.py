@@ -294,7 +294,7 @@ def train(args):
     pattern_regex = f"PaperPINN_{args.model_arch.upper()}_{args.use_loss}_(?P<num>\\d+)_.*\\.pth"
     current_num = get_next_version(ckpt_dir, pattern_regex)
     
-    base_filename = f"{args.model_arch.upper()}_{args.use_loss}"
+    base_filename = f"PaperPINN_{args.model_arch.upper()}_{args.use_loss}"
     if args.model_arch != 'mlp':
         base_filename += f"_nk{args.nk}"
     base_filename += f"_frac{args.data_fraction}_{current_num}"
@@ -453,7 +453,7 @@ def main():
     parser = argparse.ArgumentParser(description="Unified Training Pipeline for MLP and CNN")
     
     # Model Architecture
-    parser.add_argument('--model-arch', type=str, default='mlp', 
+    parser.add_argument('--model-arch', type=str, default='cnn1', 
                         choices=['mlp', 'cnn1', 'cnn2', 'cnn2pool', 'cnn2stride'],
                         help='Model architecture: mlp, cnn1 (1-layer), cnn2 (2-layer), cnn2pool (2-layer+maxpool), cnn2stride (2-layer+stride)')
     
