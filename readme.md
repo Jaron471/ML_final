@@ -2,7 +2,7 @@
 
 這個專案的目標是從 **Turing pattern**（反應擴散系統產生的斑紋）影像中，反推出對應的物理參數 **[a, b, c, delta]**。
 
-核心入口是 [train_unified.py](train_unified.py)：同一支腳本支援
+核心入口為 [train_unified.py](train_unified.py)，該腳本統一支援：
 
 - **MLP**（全連接網路）
 - **論文式極簡 CNN**（1-layer / 2-layer / 2-layer+MaxPool / 2-layer+Stride）
@@ -18,7 +18,7 @@
 
 ### 訓練流程統整
 
-在 [train_unified.py](train_unified.py) 中，我把「資料載入、模型建立、optimizer/scheduler、loss 設計、存檔與 WandB 記錄」整合成一條一致的 pipeline：
+[train_unified.py](train_unified.py) 將「資料載入、模型建立、optimizer/scheduler、loss 設計、存檔與 WandB 記錄」整合為一致的訓練流程 (pipeline)：
 
 1. **資料載入**
 	 - 使用 [model/dataset.py](model/dataset.py) 的 `TuringDataset` 讀取 `train_data.npz` / `val_data.npz`。
@@ -78,19 +78,19 @@
 資料檔（預期存在於根目錄）：
 
 - `train_data.npz` / `val_data.npz` / `test_data.npz`
-- `turing_patterns_dataset_merged.npz`（合併大資料集；主要供你自己檢查或再切資料用）
+- `turing_patterns_dataset_merged.npz`（合併大資料集；主要供檢查或重新分割資料使用）
 
 ---
 
 ## 3. Dataset 格式（NPZ）
 
-`TuringDataset` 預期你的 `.npz` 至少包含以下 keys：
+`TuringDataset` 預期輸入的 `.npz` 檔案至少包含以下 keys：
 
 - `u`: shape `(N, 128, 128)`
 - `v`: shape `(N, 128, 128)`
 - `a`, `b`, `c`, `delta`: shape `(N,)`
 
-訓練時會將 `u`、`v` 轉為 `(N, 1, 128, 128)`，並把 `[a,b,c,delta]` 正規化到 `[0,1]`。
+訓練過程中，`u`、`v` 將被轉換為 `(N, 1, 128, 128)`，且 `[a,b,c,delta]` 會被正規化至 `[0,1]` 區間。
 
 ---
 
@@ -110,7 +110,7 @@ python -m pip install --upgrade pip
 
 本專案至少需要：`torch, numpy, tqdm, wandb, gdown, pandas`。
 
-如果你有 NVIDIA GPU，建議依照 PyTorch 官網安裝對應 CUDA 版本的 torch。
+若使用 NVIDIA GPU，建議依照 PyTorch 官網指示安裝對應 CUDA 版本的 torch。
 
 安裝範例（CPU 版，簡單可跑）：
 
@@ -128,7 +128,7 @@ pip install -r requirements.txt
 python download_dataset.py
 ```
 
-注意：這支腳本會把 Google Drive folder 下載到暫存資料夾後，再 **搬移到專案根目錄**，若根目錄已有同名檔案會被覆蓋。
+注意：此腳本會將 Google Drive 資料夾下載至暫存區後，再 **搬移至專案根目錄**。若根目錄已存在同名檔案，將會被覆蓋。
 
 ### 5.2（選配）下載 paper checkpoints
 
@@ -191,15 +191,15 @@ python train_unified.py --model-arch mlp --use-loss physical --data-fraction 0.1
 
 訓練預設會呼叫 `wandb.init(...)`。
 
-你可以：
+使用者可選擇：
 
-1) 正常登入使用
+1) 登入使用
 
 ```bash
 wandb login
 ```
 
-2) 不想上傳（離線/關閉 WandB）
+2) 離線模式（不使用 WandB 上傳）
 
 Windows PowerShell：
 
@@ -226,7 +226,7 @@ python train_unified.py --model-arch cnn2 --use-loss pure --data-fraction 0.25 -
 python verify_comparison.py
 ```
 
-備註：目前 `verify_comparison.py` 裡面的 `model_files` 是手動列出檔名；如果你訓練了新模型，要把檔名加進去才會被評估。
+備註：目前 `verify_comparison.py` 內的 `model_files` 需手動指定檔名；若訓練了新模型，需將其檔名加入列表方可進行評估。
 
 ---
 
@@ -239,7 +239,7 @@ python verify_comparison.py
 
 ### 9.2 ImportError: 找不到 'model'
 
-請確認你是在「專案根目錄」執行：
+請確認是在「專案根目錄」下執行：
 
 ```bash
 python train_unified.py ...
@@ -251,12 +251,50 @@ python train_unified.py ...
 
 ### 9.4 `--phys-gradual` 看起來無法關掉？
 
-目前 `train_unified.py` 裡 `--phys-gradual` 的 argparse 設定是 `action='store_true'` 且 `default=True`，因此它預設就會是 True。
-如果你真的需要「完全固定 λ」的版本，可以再把 argparse 的 default 改成 False（或改成 `--no-phys-gradual` 風格）。
+目前 `train_unified.py` 裡 `--phys-gradual` 的 argparse 設定是 `action='store_true'` 且 `default=True`，因此預設為 True。
+若需要「完全固定 λ」的版本，可將 argparse 的 default 修改為 False（或改為 `--no-phys-gradual` 形式）。
 
 ---
 
 ## 10. 快速檢查 NPZ（可選）
 
-你可以用 [inspect_turing_npz.py](inspect_turing_npz.py) 快速查看 `.npz` 的 keys 與 shape。
-注意：該檔案內的 `NPZ_PATH` 可能需要你自己改成目前存在的 npz 檔名。
+可使用 [inspect_turing_npz.py](inspect_turing_npz.py) 快速檢視 `.npz` 的 keys 與 shape。
+注意：該檔案內的 `NPZ_PATH` 可能需自行修改為當前存在的 npz 檔名。
+
+---
+
+## 11. 資料生成 (Data Generation)
+
+若需自行重新生成資料集，請參考 `data_generate/` 資料夾下的腳本。
+
+### 11.1 生成流程
+
+1. **參數生成 (`param-gen.py`)**
+   - 根據論文範圍隨機採樣 `a, b, c, delta`。
+   - 使用 `fsolve` 計算穩態，並檢查 Turing Instability 條件（Jacobian Trace/Det）。
+   - 篩選出符合條件的參數組合。
+
+2. **模擬與生成 (`gm_cupy.py`)**
+   - 使用 **CuPy** 進行 GPU 加速求解 Gierer-Meinhardt 方程。
+   - 採用 FFT 計算 Laplacian，大幅提升速度。
+   - 輸出 `u` 與 `v` 的最終穩態斑紋。
+
+3. **資料合併 (`merge.py`)** (可選)
+   - 若分批生成多個 `.npz` 檔，可使用此腳本將其合併為一個大檔案。
+
+4. **資料分割 (`split.py`)**
+   - 將生成的 `.npz` 分割為 `train`, `val`, `test`。
+   - 預設比例可於腳本內調整（目前設定為固定數量）。
+
+### 11.2 執行方式
+
+```bash
+# 1. 生成參數 (範例)
+python data_generate/param-gen.py
+
+# 2. 執行模擬 (需安裝 cupy)
+python data_generate/gm_cupy.py
+
+# 3. 分割資料
+python data_generate/split.py
+```
