@@ -291,7 +291,7 @@ def train(args):
     if not os.path.exists(ckpt_dir): 
         os.makedirs(ckpt_dir)
     
-    pattern_regex = f"{args.model_arch.upper()}_{args.use_loss}_(?P<num>\\d+)_.*\\.pth"
+    pattern_regex = f"PaperPINN_{args.model_arch.upper()}_{args.use_loss}_(?P<num>\\d+)_.*\\.pth"
     current_num = get_next_version(ckpt_dir, pattern_regex)
     
     base_filename = f"{args.model_arch.upper()}_{args.use_loss}"
