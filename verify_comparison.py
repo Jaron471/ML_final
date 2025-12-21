@@ -254,9 +254,6 @@ def main():
         "PaperPINN_pure_nk5_frac0.1875_17_best_18.55.pth",
         "PaperPINN_pure_nk5_frac0.125_6_best_18.68.pth",
         "PaperPINN_pure_nk5_frac0.0125_10_best_19.62.pth",
-    ]
-    '''
-    model_files = [
         "PaperPINN_cnn2_physical_nk5_frac0.25_53_best.pth",
         "PaperPINN_cnn2_pure_nk5_frac0.25_58_best.pth",
         "PaperPINN_cnn2pool_physical_nk5_frac0.25_54_best.pth",
@@ -265,8 +262,8 @@ def main():
         "PaperPINN_cnn2stride_pure_nk5_frac0.25_56_best.pth",
         "PaperPINN_physical_nk5_frac0.375_28_best.pth",
         "PaperPINN_pure_nk5_frac0.375_29_best.pth",
-
-    ]'''
+        "PaperPINN_physical_nk5_frac1.0_25_best_11.77_Rmask.pth",
+    ]
 
     print(f"📦 Loading Test Data from: {TEST_PATH}")
     if not os.path.exists(TEST_PATH):
@@ -284,8 +281,14 @@ def main():
 
     print("\n🚀 Starting Evaluation...")
     
+    # Special tracking for Rmask comparison
+    rmask_comparison = {}
+    
     for filename in sorted(model_files):
         filepath = os.path.join(CKPT_DIR, filename)
+        
+        # Check for Rmask variant
+        has_rmask = '_Rmask' in filename
         
         # Try new format first: PaperPINN_{model_type}_{loss_type}_nk...
         match_new = re.search(r'PaperPINN_(?P<model>[a-zA-Z0-9]+)_(?P<loss>pure|physical)_nk(?P<nk>\d+)_frac(?P<frac>[\d\.]+)_', filename)
@@ -349,6 +352,13 @@ def main():
         if model_arch not in comparison_results: comparison_results[model_arch] = {}
         if frac not in comparison_results[model_arch]: comparison_results[model_arch][frac] = {}
         comparison_results[model_arch][frac][loss_type] = metrics
+        
+        # Track Rmask comparison for frac=1.0 physical models
+        # Note: Rmask version = No mask, Original = With mask
+        if has_rmask and loss_type == 'physical' and frac == 1.0:
+            rmask_comparison['no_mask'] = metrics
+        elif not has_rmask and loss_type == 'physical' and frac == 1.0 and model_arch == 'cnn1':
+            rmask_comparison['with_mask'] = metrics
 
     # Generate reports for each model architecture
     for model_arch, results in comparison_results.items():
@@ -374,6 +384,61 @@ def main():
             higher_is_better=True
         )
 
+    # Special Rmask Comparison Report
+    if len(rmask_comparison) == 2:
+        print("\n" + "#"*80)
+        print("🔬 SPECIAL COMPARISON: Mask Effect (frac=1.0, Physical Loss)")
+        print("#"*80)
+        
+        metrics_to_compare = [
+            ('NRMSE_Joint', 'Joint NRMSE', '%', False),
+        ]
+        
+        print("\n" + "="*80)
+        print("📊 With-Mask vs No-Mask Comparison")
+        print("="*80)
+        
+        table_data = []
+        for metric_key, metric_name, unit, higher_is_better in metrics_to_compare:
+            with_mask = rmask_comparison['with_mask'].get(metric_key, np.nan)
+            no_mask = rmask_comparison['no_mask'].get(metric_key, np.nan)
+            
+            row = {'Metric': metric_name}
+            
+            # Format values
+            if unit == '%' and 'NRMSE' in metric_key:
+                row['With-Mask'] = f"{with_mask:.2%}" if not np.isnan(with_mask) else "-"
+                row['No-Mask'] = f"{no_mask:.2%}" if not np.isnan(no_mask) else "-"
+            elif unit == '%':
+                row['With-Mask'] = f"{with_mask:.2f}" if not np.isnan(with_mask) else "-"
+                row['No-Mask'] = f"{no_mask:.2f}" if not np.isnan(no_mask) else "-"
+            else:
+                row['With-Mask'] = f"{with_mask:.4f}" if not np.isnan(with_mask) else "-"
+                row['No-Mask'] = f"{no_mask:.4f}" if not np.isnan(no_mask) else "-"
+            
+            # Calculate improvement
+            if not np.isnan(with_mask) and not np.isnan(no_mask):
+                if higher_is_better:
+                    diff = no_mask - with_mask
+                    row['Diff'] = f"{diff:+.4f}"
+                    row['Winner'] = "No-Mask 🔴" if diff > 0 else "With-Mask 🟢"
+                else:
+                    diff = with_mask - no_mask
+                    imp = (diff / with_mask) * 100
+                    row['Imp(%)'] = f"{imp:+.2f}%"
+                    row['Winner'] = "No-Mask 🔴" if diff > 0 else "With-Mask 🟢"
+            else:
+                if higher_is_better:
+                    row['Diff'] = "-"
+                else:
+                    row['Imp(%)'] = "-"
+                row['Winner'] = "-"
+            
+            table_data.append(row)
+        
+        df = pd.DataFrame(table_data)
+        print(df.to_string(index=False))
+    
     print("\n" + "#"*80)
     print("Done.")
 
