@@ -87,6 +87,32 @@ class PaperMinimalCNN2MaxPool(nn.Module):
         x = self.fc_out(x)
         return torch.sigmoid(x)
 
+class PaperMinimalCNN2Stride(nn.Module):
+    def __init__(self, nk=5, np_size=5, nf=5, input_size=128):
+        super(PaperMinimalCNN2Stride, self).__init__()
+        
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=nk, kernel_size=np_size, stride=2, padding=0)
+        self.conv2 = nn.Conv2d(in_channels=nk, out_channels=nk, kernel_size=np_size, stride=2, padding=0)
+        
+        # Calculate output dimension
+        # After Conv1 (stride 2)
+        d1 = (input_size - np_size) // 2 + 1
+        # After Conv2 (stride 2)
+        d2 = (d1 - np_size) // 2 + 1
+        
+        self.flat_features = nk * d2 * d2
+        
+        self.fc1 = nn.Linear(self.flat_features, nf)
+        self.fc_out = nn.Linear(nf, 4) 
+
+    def forward(self, x):
+        x = torch.relu(self.conv1(x))
+        x = torch.relu(self.conv2(x))
+        x = x.view(x.size(0), -1)
+        x = torch.relu(self.fc1(x))
+        x = self.fc_out(x)
+        return torch.sigmoid(x)
+
 # ==========================================
 # 2. 多元評估指標計算函式
 # ==========================================
@@ -229,6 +255,18 @@ def main():
         "PaperPINN_pure_nk5_frac0.125_6_best_18.68.pth",
         "PaperPINN_pure_nk5_frac0.0125_10_best_19.62.pth",
     ]
+    '''
+    model_files = [
+        "PaperPINN_cnn2_physical_nk5_frac0.25_53_best.pth",
+        "PaperPINN_cnn2_pure_nk5_frac0.25_58_best.pth",
+        "PaperPINN_cnn2pool_physical_nk5_frac0.25_54_best.pth",
+        "PaperPINN_cnn2pool_pure_nk5_frac0.25_57_best.pth",
+        "PaperPINN_cnn2stride_physical_nk5_frac0.25_55_best.pth",
+        "PaperPINN_cnn2stride_pure_nk5_frac0.25_56_best.pth",
+        "PaperPINN_physical_nk5_frac0.375_28_best.pth",
+        "PaperPINN_pure_nk5_frac0.375_29_best.pth",
+
+    ]'''
 
     print(f"📦 Loading Test Data from: {TEST_PATH}")
     if not os.path.exists(TEST_PATH):
@@ -280,6 +318,8 @@ def main():
             model = PaperMinimalCNN2(nk=5, np_size=5, nf=5).to(config.DEVICE)
         elif model_arch == 'cnn2pool':
             model = PaperMinimalCNN2MaxPool(nk=5, np_size=5, nf=5).to(config.DEVICE)
+        elif model_arch == 'cnn2stride':
+            model = PaperMinimalCNN2Stride(nk=5, np_size=5, nf=5).to(config.DEVICE)
         else:
             print(f"⚠️ Unknown model architecture: {model_arch}, skipping.")
             continue
