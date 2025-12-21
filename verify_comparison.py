@@ -249,7 +249,6 @@ def main():
         "PaperPINN_physical_nk5_frac0.0125_9_best_19.50.pth",
         "PaperPINN_pure_nk5_frac1.0_8_best_11.89.pth",
         "PaperPINN_pure_nk5_frac0.6_2_best_13.06.pth",
-        "PaperPINN_pure_nk5_frac0.375_21_best_14.01.pth",
         "PaperPINN_pure_nk5_frac0.25_4_best_17.92.pth",
         "PaperPINN_pure_nk5_frac0.1875_17_best_18.55.pth",
         "PaperPINN_pure_nk5_frac0.125_6_best_18.68.pth",
