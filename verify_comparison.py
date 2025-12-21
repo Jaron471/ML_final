@@ -18,6 +18,7 @@ if sys.stdout.encoding != 'utf-8':
 try:
     from model import config
     from model.dataset import TuringDataset
+    from model.model import MLPNet
 except ImportError:
     print("❌ 錯誤: 找不到 'model' 模組。請確保你的專案目錄結構正確。")
     sys.exit(1)
@@ -264,6 +265,10 @@ def main():
         "PaperPINN_physical_nk5_frac1.0_25_best_11.77_Rmask.pth",
         "PaperPINN_CNN1_physical_nk5_frac0.1_1_best.pth",
         "PaperPINN_CNN1_pure_nk5_frac0.1_1_best.pth",
+        "PaperPINN_MLP_physical_frac0.25_2_best.pth",
+        "PaperPINN_MLP_physical_frac1.0_1_best.pth",
+        "PaperPINN_MLP_pure_frac0.25_2_best.pth",
+        "PaperPINN_MLP_pure_frac1.0_1_best.pth",
     ]
 
     print(f"📦 Loading Test Data from: {TEST_PATH}")
@@ -291,13 +296,20 @@ def main():
         # Check for Rmask variant
         has_rmask = '_Rmask' in filename
         
-        # Try new format first: PaperPINN_{model_type}_{loss_type}_nk...
+        # Try MLP format: PaperPINN_MLP_{loss_type}_frac...
+        match_mlp = re.search(r'PaperPINN_MLP_(?P<loss>pure|physical)_frac(?P<frac>[\d\.]+)_', filename)
+        
+        # Try new format: PaperPINN_{model_type}_{loss_type}_nk...
         match_new = re.search(r'PaperPINN_(?P<model>[a-zA-Z0-9]+)_(?P<loss>pure|physical)_nk(?P<nk>\d+)_frac(?P<frac>[\d\.]+)_', filename)
         
         # Try old format: PaperPINN_{loss_type}_nk...
         match_old = re.search(r'PaperPINN_(?P<loss>pure|physical)_nk(?P<nk>\d+)_frac(?P<frac>[\d\.]+)_', filename)
         
-        if match_new:
+        if match_mlp:
+            model_arch = 'mlp'
+            loss_type = match_mlp.group('loss')
+            frac = float(match_mlp.group('frac'))
+        elif match_new:
             model_arch = match_new.group('model').lower()
             loss_type = match_new.group('loss')
             frac = float(match_new.group('frac'))
@@ -316,7 +328,9 @@ def main():
             continue
 
         # Instantiate correct model
-        if model_arch == 'cnn1':
+        if model_arch == 'mlp':
+            model = MLPNet().to(config.DEVICE)
+        elif model_arch == 'cnn1':
             model = PaperMinimalCNN(nk=5, np_size=5, nf=5).to(config.DEVICE)
         elif model_arch == 'cnn2':
             model = PaperMinimalCNN2(nk=5, np_size=5, nf=5).to(config.DEVICE)
@@ -340,7 +354,11 @@ def main():
         with torch.no_grad():
             for u_batch, _, params_target in loader:
                 u_batch = u_batch.to(config.DEVICE)
-                u_input = u_batch[:, 0:1, :, :] if u_batch.shape[1] > 1 else u_batch
+                # MLP uses full input, CNN uses only first channel
+                if model_arch == 'mlp':
+                    u_input = u_batch
+                else:
+                    u_input = u_batch[:, 0:1, :, :] if u_batch.shape[1] > 1 else u_batch
                 preds = model(u_input)
                 all_preds.append(preds.cpu().numpy())
                 all_targets.append(params_target.numpy())
@@ -361,8 +379,13 @@ def main():
         elif not has_rmask and loss_type == 'physical' and frac == 1.0 and model_arch == 'cnn1':
             rmask_comparison['with_mask'] = metrics
 
-    # Generate reports for each model architecture
+    # Generate reports for each model architecture (CNN first, MLP last)
+    mlp_results = None
     for model_arch, results in comparison_results.items():
+        if model_arch == 'mlp':
+            mlp_results = results
+            continue
+            
         print("\n" + "#"*80)
         print(f"🏆 FINAL COMPARISON REPORT: {model_arch}")
         print("#"*80)
@@ -383,6 +406,21 @@ def main():
             title=f"[{model_arch}] Mean R² Score Comparison (Higher is Better)", 
             unit="", 
             higher_is_better=True
+        )
+    
+    # Generate MLP report last (NRMSE only)
+    if mlp_results:
+        print("\n" + "#"*80)
+        print(f"🏆 FINAL COMPARISON REPORT: mlp")
+        print("#"*80)
+
+        # Only NRMSE Table for MLP
+        generate_metric_report(
+            mlp_results, 
+            metric_key='NRMSE_Joint', 
+            title=f"[mlp] Joint NRMSE Comparison (Lower is Better)", 
+            unit="%", 
+            higher_is_better=False
         )
 
     # Special Rmask Comparison Report
