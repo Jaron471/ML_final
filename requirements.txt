@@ -1,0 +1,7 @@
+numpy
+pandas
+tqdm
+wandb
+gdown
+# Install torch per https://pytorch.org/get-started/locally/
+torch

@@ -1,312 +1,263 @@
-# Turing Pattern Inversion Network (TPIN)
+# ML_final — Turing Pattern 參數反推（Unified Training Pipeline）
 
-這是一個利用深度學習 (CNN/MLP) 與物理約束神經網絡 (PINN) 來逆向推導 Gierer-Meinhardt (GM) 反應擴散方程參數的專案。
+這個專案的目標是從 **Turing pattern**（反應擴散系統產生的斑紋）影像中，反推出對應的物理參數 **[a, b, c, delta]**。
 
------
+核心入口是 [train_unified.py](train_unified.py)：同一支腳本支援
 
-### 1. 數據生成流程 (Data Generation Pipeline)
+- **MLP**（全連接網路）
+- **論文式極簡 CNN**（1-layer / 2-layer / 2-layer+MaxPool / 2-layer+Stride）
+- 兩種訓練策略：
+	- **Pure（純監督）**：只用 supervised loss
+	- **Physical（PINN-like）**：supervised loss + 物理殘差（Physics Loss）
 
-這部分的程式碼負責生成符合 Turing Instability 條件的參數，並利用數值模擬產生對應的斑紋圖像。
+同時提供 [verify_comparison.py](verify_comparison.py) 針對不同 data fraction / loss type / model arch 的評估報表。
 
-*   **`param-gen.py` (參數篩選)**
-    *   **功能**：基於線性穩定性分析 (Linear Stability Analysis)，在廣大的參數空間中隨機採樣，篩選出能產生圖靈斑紋的參數組合 $(a, b, c, \delta)$。
-    *   **產出**：`qualified_turing_params_20000.csv` (包含合格參數的列表)。
+---
 
-*   **`gm_cupy.py` / `gm_mps.py` (模擬引擎)**
-    *   **功能**：讀取 CSV 中的參數，利用數值方法 (Finite Difference + FFT) 解 GM 方程。
-    *   **版本**：
-        *   `gm_cupy.py`: 基於 **CuPy** (NVIDIA GPU) 的高效能版本。
-        *   `gm_mps.py`: 針對 **Mac GPU (MPS)** 加速的版本。
-    *   **產出**：`.npz` 檔案 (包含圖像 $u, v$ 和對應參數)。
+## 1. 專案你會用到什麼
 
-*   **`merge.py` (數據整理)**
-    *   **功能**：將分批生成的 `.npz` 檔案合併成一個完整的數據集，並處理 ID 排序。
-    *   **產出**：`turing_patterns_dataset_merged.npz`。
+### 我做了什麼（訓練流程統整）
 
------
+在 [train_unified.py](train_unified.py) 中，我把「資料載入、模型建立、optimizer/scheduler、loss 設計、存檔與 WandB 記錄」整合成一條一致的 pipeline：
 
-### 2. 模型核心庫 (`model/` 資料夾)
+1. **資料載入**
+	 - 使用 [model/dataset.py](model/dataset.py) 的 `TuringDataset` 讀取 `train_data.npz` / `val_data.npz`。
+	 - 影像：`u`、`v` 皆會變成 `(N, 1, 128, 128)`。
+	 - 標籤：`a,b,c,delta` 會堆成 `(N, 4)`，再透過 MinMaxScaler 正規化到 `[0,1]`。
+	 - 可用 `--data-fraction` 做 **data ablation**（固定 seed=42 的 random_split）。
 
-*   **`model/config.py` (統一配置)**
-    *   **功能**：統一管理所有訓練與模型的超參數。
-    *   **硬體設定**：自動偵測 CUDA/MPS/CPU。
-    *   **物理參數**：`N_GRID=128`, `DX=1.0`, `S_DIFFUSION=0.4`。
-    *   **訓練參數**：`BATCH_SIZE=32`, `EPOCHS=100`, `LEARNING_RATE=1e-4`。
-    *   **數據分割**：
-        *   `TRAIN_RATIO = 0.6` (60% 訓練)
-        *   `VAL_RATIO = 0.2` (20% 驗證)
-        *   `TEST_RATIO = 0.2` (20% 測試)
-*   **`model/model.py` (大腦結構)**
-    *   **功能**：定義神經網絡架構。
-        *   `ParameterNet`: CNN 架構，提取圖像空間特徵。
-        *   `MLPNet`: 全連接層架構 (Baseline)。
-        *   `ForwardSurrogate`: 參數→圖像生成器 (混合方法使用)。
-*   **`model/loss.py` (物理導師)**
-    *   **功能**：定義各種損失函數。
-        *   `PhysicsLoss`: 計算 PDE 殘差。
-        *   `FourierLoss`: 頻域特徵損失。
-        *   `HistogramLoss`: 統計分佈損失。
-        *   `GradNorm`: 動態權重調整算法。
-*   **`model/dataset.py` (資料搬運工)**
-    *   **功能**：負責讀取 `.npz`，並進行數據正規化 (Normalization)。
-*   **`model/utils.py` (工具箱)**
-    *   **功能**：包含 `MinMaxScaler`、`calculate_multidim_nrmse` (多維 NRMSE 計算)、以及模型版本管理工具 (`get_next_version`, `find_model_path`)。
+2. **模型（Model Architecture）**
+	 - `mlp`：使用 [model/model.py](model/model.py) 的 `MLPNet`（Flatten → 1024 → 512 → 128 → 4，最後 sigmoid）。
+	 - `cnn1/cnn2/cnn2pool/cnn2stride`：在 [train_unified.py](train_unified.py) 內定義的 PaperMinimalCNN 系列。
+		 - 以 `nk`（channels）、`np`（kernel size）、`nf`（hidden neurons）控制容量。
 
------
+3. **Optimizer / Scheduler**
+	 - MLP：AdamW（預設 `lr=1e-4`，weight_decay=0.01）+ gradient clipping (`max_norm=1.0`)。
+	 - CNN：Adam（預設 `lr=1e-3`）。
+	 - Scheduler：**Warmup(10% epochs) + CosineAnnealing**（SequentialLR）。
 
-### 3. 執行與驗證 (Execution & Verification)
+4. **Loss 設計（最重要）**
+	 - Supervised Loss：
+		 - MLP：**weighted L1**（權重在 [model/config.py](model/config.py) 的 `LOSS_WEIGHTS`）
+		 - CNN：MSE
+	 - Physics Loss（physical / PINN-like）：
+		 - 由 [model/loss.py](model/loss.py) 的 `PhysicsLoss` 計算 Gierer–Meinhardt 反應擴散方程殘差
+		 - Laplacian 使用 circular padding 以符合週期邊界
+		 - **Masked Physics Loss**：只在 `u > mean(u)` 的斑紋區域計算殘差，避免背景噪聲稀釋梯度
+	 - Physics loss 權重：`loss = loss_sup + λ * loss_phy`
+		 - `λ` 由 `--lambda-phy` 指定，且可用 `--phys-gradual` 做 gradual / warmup（CNN: epoch 20 step；MLP: epoch 20→60 sigmoid warmup）。
+	 - （選配）GradNorm：在 MLP + physical 且 `config.USE_GRADNORM=True` 時會啟用，用於動態調整 supervised/physics 權重。
 
-*   **`train.py` (統一訓練腳本)**
-    *   **功能**：整合了所有訓練模式 (Pure, PINN, Hybrid) 的單一入口。
-    *   **主要參數**：
-        *   `--pretrain`: 執行 Phase 1 (Surrogate) 訓練。
-        *   `--train-model`: 選擇模型架構 (`CNN` / `MLP` / `PaperCNN`)。
-        *   `--use-loss`: 選擇 Loss 類型 (`pure`, `physical`, `surrogate`)。
-        *   `--phys-gradual`: 啟用漸進式 Loss 引入。
-        *   `--data-fraction`: 數據消融測試 (0.0 ~ 1.0)。
-        *   `--surrogate-num`: 指定使用的 Surrogate 版本。
-        *   `--surrogate-model`: 選擇 Surrogate 架構 (`Dense` / `Paper`)。
-    *   **模型管理**：
-        *   Phase 1 模型存於 `checkpoint/surrogate/`，命名格式 `Surrogate_{model}_{type}_{num}_{wandb}.pth`。
-        *   Phase 2 模型存於 `checkpoint/`，命名格式 `{model}_{loss}_{num}_{wandb}_{best/last}.pth`。
-    *   **數據分割**：
-        *   Step 1: 80% (Train+Val) vs 20% (Test)。
-        *   Step 2: 從 80% 中再分 3:1 為 Train 與 Val。
-        *   Data Ablation 僅影響 Train+Val 的總量，Test Set 保持固定。
+5. **Checkpoint 存檔**
+	 - 預設輸出到資料夾 `paper_checkpoints/`
+	 - 每次訓練都會存：
+		 - `*_last.pth`（每個 epoch 覆蓋一次）
+		 - `*_best.pth`（validation NRMSE 最佳才更新）
+	 - 命名格式（由程式自動遞增版本號）：
+		 - `PaperPINN_{ARCH}_{LOSS}_nk{nk}_frac{fraction}_{version}_{best|last}.pth`（CNN 類）
+		 - `PaperPINN_{ARCH}_{LOSS}_frac{fraction}_{version}_{best|last}.pth`（MLP）
 
-*   **`verify.py` (統一驗證腳本)**
-    *   **功能**：在獨立的 **Test Set** (20%) 上評估模型效能。
-    *   **參數**：
-        *   `--model-type`: 模型架構 (預設 CNN)。
-        *   `--loss-type`: Loss 類型 (預設 pure)。
-        *   `--num`: 訓練編號 (預設最新)。
-        *   `--suffix`: 模型後綴 (預設 best)。
-        *   `--model-path`: 直接指定路徑 (最高優先級)。
-    *   **指標**：計算 $R^2$, MAE, RMSE, 以及多維 NRMSE。
+6. **評估指標**
+	 - training / validation 主要看 `NRMSE`（normalized space, multi-dim joint）
+	 - [verify_comparison.py](verify_comparison.py) 會輸出更多表格：NRMSE / R² / MAPE / Max Error
 
-*   **`visual_check.py` (視覺/閉環驗證)**
-    *   **功能**：將模型預測的參數帶回 GM 方程重新模擬，比較「原圖」與「重建圖」的相似度。
+---
 
------
+## 2. 專案結構
 
-### 4. 論文復現實驗 (Paper Reproduction)
+常用檔案：
 
-本專案亦包含對論文 "Learning System Parameters from Turing Patterns" 中提出的極簡 CNN 架構的復現與改進。
+- [train_unified.py](train_unified.py)：主要訓練入口（MLP/CNN + pure/physical）
+- [verify_comparison.py](verify_comparison.py)：批次載入 checkpoints，輸出比較報表
+- [download_dataset.py](download_dataset.py)：從 Google Drive 下載資料集到專案根目錄
+- [download_checkpoints.py](download_checkpoints.py)：下載預訓練 checkpoints 到 `paper_checkpoints/`
+- [model/config.py](model/config.py)：路徑、超參數、loss weights、WandB project
+- [model/dataset.py](model/dataset.py)：NPZ → Dataset（含 MinMax 正規化）
+- [model/loss.py](model/loss.py)：PhysicsLoss（含 Mask）+ GradNorm
+- [model/utils.py](model/utils.py)：MinMaxScaler、NRMSE、checkpoint 版本號工具
 
-*   **`train_paper_cnn.py` (論文原始架構)**
-    *   **功能**：實作論文中的極簡 CNN 架構 (PaperMinimalCNN)。
-    *   **架構**：`Conv2d` -> `ReLU` -> `Flatten` -> `Linear` -> `ReLU` -> `Linear` -> `Sigmoid`。
-    *   **特點**：參數量極少，旨在驗證極簡模型對圖靈斑紋參數的反演能力。
-    *   **訓練**：使用 MSE Loss 與 Adam 優化器。
+資料檔（預期存在於根目錄）：
 
-*   **`train_paper_pinn.py` (論文架構 + PINN)**
-    *   **功能**：在論文極簡架構基礎上，引入物理約束 (Physics Loss)。
-    *   **改進**：
-        *   加入 **Physics Loss** 以強化物理一致性。
-        *   引入 **Warm-up + Cosine Annealing** 學習率調度，提升訓練穩定性。
+- `train_data.npz` / `val_data.npz` / `test_data.npz`
+- `turing_patterns_dataset_merged.npz`（合併大資料集；主要供你自己檢查或再切資料用）
 
-> **💡 進階組合 (New!)**：
-> 透過整合後的 `train.py`，您現在可以嘗試 **Paper CNN + Surrogate Loss** 的強大組合！
-> 這結合了極簡架構的泛化優勢與代理模型的高階梯度引導。
-> ```bash
-> python train.py --train-model PaperCNN --use-loss surrogate --lr 1e-3
-> ```
+---
 
------
+## 3. Dataset 格式（NPZ）
 
-### 5. 新興方法 (Emerging Approaches)
+`TuringDataset` 預期你的 `.npz` 至少包含以下 keys：
 
-#### 5.1 圖論電阻距離直方圖特徵 (RDH Features)
+- `u`: shape `(N, 128, 128)`
+- `v`: shape `(N, 128, 128)`
+- `a`, `b`, `c`, `delta`: shape `(N,)`
 
-*   **`FE.py` (圖論特徵提取)**
-    *   **功能**：將圖靈斑紋圖像轉換為圖論拓撲特徵。
-        *   **加權圖構建**：根據像素值高低建立鄰接矩陣，高值區域間權重為1.0，跨越邊界權重為ε。
-        *   **電阻距離計算**：基於電學類比計算節點間電阻距離。
-        *   **兩階段處理**：先掃描數據集確定全局R_max，再生成12-bin直方圖特徵。
-    *   **產出**：前12維是RDH特徵向量，用來捕捉圖像的拓撲結構特徵，再加上第1維增強特徵：最大濃度，用來捕捉圖案的絕對濃度資訊。
-    *   **應用**：可用於特徵工程、圖像分類或作為傳統機器學習的輸入。
+訓練時會將 `u`、`v` 轉為 `(N, 1, 128, 128)`，並把 `[a,b,c,delta]` 正規化到 `[0,1]`。
 
-#### 5.2 混合循環訓練架構 (Hybrid Surrogate + Inverse)
+---
 
-*   **`train_hybrid.py` (雙向循環訓練)**
-    *   **功能**：通過Forward Surrogate與Inverse CNN的循環一致性訓練，強化物理約束。
-        *   **Phase 1**：訓練Forward Surrogate (參數→圖像)，使用FourierLoss + HistogramLoss，可選物理損失。
-        *   **Phase 2&3**：訓練Inverse CNN (圖像→參數)，結合監督學習與循環物理約束。
-        *   **課程學習**：使用sigmoid函數實現surrogate loss的平滑漸進引入 (epoch 20-60)，避免訓練不穩定。
-        *   **優化器**：AdamW (weight_decay=0.01)，提供更好的泛化性能。
-        *   **模型保存**：自動保存最佳驗證損失模型和最終模型。
-    *   **產出**：`checkpoint/forward_surrogate.pth` (正向模擬器) + `checkpoint/inverse_cnn_hybrid.pth` (逆向預測器) + `checkpoint/CNN_PINN_best.pth` (最佳模型)。
-    *   **優勢**：通過雙向映射驗證，獲得更強的物理一致性；平滑的損失引入提升訓練穩定性。
+## 4. 環境安裝（Windows / Linux / macOS）
 
-*   **`visualize_lambda_schedule.py` (損失調度可視化)**
-    *   **功能**：可視化surrogate loss的漸進引入調度曲線。
-    *   **產出**：`surrogate_loss_schedule.png` (調度曲線圖) + 控制台表格輸出。
-    *   **使用**：`python visualize_lambda_schedule.py`
+建議 Python 3.10+。
 
-*   **`GRADUAL_SURROGATE_README.md` (詳細技術文檔)**
-    *   **功能**：詳細說明surrogate loss漸進引入的技術實現和優勢。
-    *   **內容**：sigmoid調度參數、訓練階段說明、可視化指南、兼容性說明。
-
------
-
-### 6. 舊版腳本 (Deprecated)
-
-以下腳本已被 `train.py` 取代，保留僅供參考：
-*   `train_pinn.py`
-*   `train_hybrid.py`
-*   `model/config_pinn.py`
-*   `model/config_hybrid.py`
-
------
-
-### 🚀 如何使用 (完整 Pipeline)
-
-#### Step 1: 生成參數與數據
-
-1.  生成合格參數表：
-    ```bash
-    python param-gen.py
-    ```
-2.  執行模擬 (選擇適合你硬體的腳本)：
-    ```bash
-    # NVIDIA GPU
-    python gm_cupy.py
-    # Mac Silicon
-    python gm_mps.py
-    ```
-3.  合併數據 (如果分批生成)：
-    ```bash
-    python merge.py
-    ```
-
-#### Step 2: 設定實驗
-
-打開 `model/config.py`，確認：
-1.  `NPZ_PATH`: 指向合併後的 `.npz` 檔。
-2.  `MODEL_TYPE`: 選擇 `"CNN"` 或 `"MLP"`。
-3.  `USE_PHYSICS`: 選擇 `True` (PINN) 或 `False` (Pure Data)。
-
-#### Step 3: 開始訓練
-
-**推薦使用統一運行腳本** (無需手動切換config)：
+### 4.1 建立虛擬環境（Windows PowerShell）
 
 ```bash
-# 🚀 快速運行 (使用預設配置: hybrid + train)
-python3 run_experiment.py
-
-# 自定義配置
-python3 run_experiment.py --method pinn --action train
-python3 run_experiment.py --method hybrid --action verify
-
-# 混合循環方法 (Hybrid) 進階控制
-# --phase 參數僅適用於 hybrid + train
-python3 run_experiment.py --method hybrid --action train --phase both           # 訓練 Phase 1 + Phase 2&3 (預設)
-python3 run_experiment.py --method hybrid --action train --phase surrogate_only # 只訓練 Phase 1 (Surrogate)
-python3 run_experiment.py --method hybrid --action train --phase inverse_only   # 只訓練 Phase 2&3 (Inverse CNN)
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
 ```
 
-**VS Code 一鍵執行**：直接在編輯器中運行 `run_experiment.py`，會使用最上方的默認配置！
+### 4.2 安裝依賴
 
-**或者直接運行各別腳本** (需手動設定config)：
-```bash
-# 原始PINN方法
-python3 train_pinn.py
+本專案至少需要：`torch, numpy, tqdm, wandb, gdown, pandas`。
 
-# 混合循環方法 (預設執行 both phases)
-python3 train_hybrid.py
-```
+如果你有 NVIDIA GPU，建議依照 PyTorch 官網安裝對應 CUDA 版本的 torch。
 
-#### Step 4: 驗證成效
-
-**使用統一運行腳本**：
+安裝範例（CPU 版，簡單可跑）：
 
 ```bash
-# 快速驗證 (使用預設配置)
-python3 run_experiment.py --action verify
-
-# 自定義驗證
-python3 run_experiment.py --method pinn --action verify
-python3 run_experiment.py --method hybrid --action visual_check
+pip install -r requirements.txt
 ```
 
-**或者直接運行驗證腳本**：
+---
+
+## 5. 資料準備
+
+### 5.1 下載資料集（會把檔案放到根目錄）
+
 ```bash
-# 數值指標 (R², MAE, NRMSE)
-python3 verify.py --method pinn    # 或 --method hybrid
-python3 visual_check.py --method pinn  # 或 --method hybrid
-
-# 可視化損失調度 (僅適用於hybrid方法)
-python3 visualize_lambda_schedule.py
+python download_dataset.py
 ```
 
-> **關於 NRMSE 指標的說明**：
-> 本專案採用的 NRMSE 計算方式遵循論文中的「完全平均」(Fully Averaged) 定義：
-> 1. 計算所有樣本與所有參數的誤差平方和。
-> 2. 除以總預測點數 ($m \times d$) 後開根號，得到 RMSE。
-> 3. 除以真實參數平均向量的歐幾里得範數 ($||y_{mean}||$) 進行標準化。
-> 
-> 公式：$NRMSE = \frac{\sqrt{\frac{1}{m \cdot d} \sum_{i=1}^{m} \sum_{j=1}^{d} (y_{i,j} - \hat{y}_{i,j})^2}}{||\bar{y}||_2}$
+注意：這支腳本會把 Google Drive folder 下載到暫存資料夾後，再 **搬移到專案根目錄**，若根目錄已有同名檔案會被覆蓋。
 
-#### 進階方法使用指南
+### 5.2（選配）下載 paper checkpoints
 
-##### 方法A: 圖論特徵提取 (RDH Features)
 ```bash
-# 使用統一腳本
-python run_experiment.py --method fe --action extract
-
-# 或直接運行
-python FE.py
+python download_checkpoints.py
 ```
-**注意**：需要安裝 CuPy，適合 NVIDIA GPU 環境。
 
-##### 方法B: 混合循環訓練 (Hybrid Training)
+---
+
+## 6. 訓練：train_unified.py
+
+### 6.1 最常用指令（快速開始）
+
+1) CNN2 + Pure（25% data）
+
 ```bash
-# Phase 1: 訓練 Forward Surrogate
-python run_experiment.py --method hybrid --action train --phase surrogate_only
-
-# Phase 2&3: 訓練 Inverse CNN (需先有 Phase 1 模型)
-python run_experiment.py --method hybrid --action train --phase inverse_only
-
-# 一次跑完所有階段 (預設)
-python run_experiment.py --method hybrid --action train --phase both
-
-# 可視化損失調度曲線
-python visualize_lambda_schedule.py
+python train_unified.py --model-arch cnn2 --use-loss pure --data-fraction 0.25 --nk 5 --np 5 --nf 5
 ```
-**產出**：`checkpoint/forward_surrogate.pth` + `checkpoint/inverse_cnn_hybrid.pth` + `checkpoint/CNN_PINN_best.pth`
 
------
+2) CNN2 + Physical（25% data）
 
-### 📊 方法比較總表
+```bash
+python train_unified.py --model-arch cnn2 --use-loss physical --data-fraction 0.25 --nk 5 --np 5 --nf 5 --phys-gradual
+```
 
-| 方法 | 核心技術 | 優勢 | 適用場景 | 計算需求 | LR Scheduler | 優化器 |
-|------|----------|------|----------|----------|-------------|--------|
-| **原始PINN** (`train_pinn.py`) | CNN/MLP + PDE殘差 | 直接物理約束，理論嚴謹 | 標準逆問題 | 中等 | Warm-up + Cosine | AdamW |
-| **RDH特徵** (`FE.py`) | 圖論電阻距離 | 拓撲結構捕捉，解釋性強 | 特徵分析，可視化 | 高 (GPU) | Reduce LR on Plateau | Adam |
-| **混合循環** (`train_hybrid.py`) | 雙向循環一致性 + 漸進損失 | 強物理一致性，平滑訓練，魯棒性高 | 高精度應用 | 高 | Warm-up + Cosine | AdamW |
+3) MLP + Pure（10% data）
 
-**建議使用順序**：從原始PINN開始 → 嘗試混合循環 → 視需要提取RDH特徵進行分析。
+```bash
+python train_unified.py --model-arch mlp --use-loss pure --data-fraction 0.1
+```
 
------
+4) MLP + Physical（10% data）
 
-### 🔄 最新改進 (Latest Improvements)
+```bash
+python train_unified.py --model-arch mlp --use-loss physical --data-fraction 0.1 --phys-gradual
+```
 
-#### v2.1 - 訓練穩定性與性能優化
-*   **優化器升級**：全方法統一使用AdamW (weight_decay=0.01)，提升泛化性能
-*   **學習率調度改進**：添加Warm-up階段 (前10% epochs)，避免訓練初期不穩定
-*   **模型保存增強**：自動保存最佳驗證損失模型和最終訓練模型
-*   **Surrogate Loss漸進引入**：使用sigmoid函數實現平滑過渡，避免突然損失跳躍
-*   **Phase 1物理損失選項**：可選擇是否在正向代理訓練中添加物理約束
-*   **可視化工具**：新增`visualize_lambda_schedule.py`用於損失調度分析
-*   **詳細文檔**：新增`GRADUAL_SURROGATE_README.md`技術說明文檔
+### 6.2 參數說明
 
-#### 訓練穩定性提升
-- **之前**：Surrogate loss在epoch 30突然從0跳到0.01，造成梯度衝擊
-- **現在**：使用sigmoid函數在epoch 20-60間平滑過渡，提升收斂穩定性
+- `--model-arch`：`mlp | cnn1 | cnn2 | cnn2pool | cnn2stride`
+- `--use-loss`：
+	- `pure`：只跑 supervised
+	- `physical`：supervised + physics residual
+- `--data-fraction`：資料抽樣比例（例如 0.1 = 10%）
+- `--nk --np --nf`：CNN 的容量超參數
+- `--lambda-phy`：physics loss 權重（預設 0.01）
+- `--phys-gradual`：逐步引入 physics loss
+- `--lr`：指定學習率（不填則：CNN=1e-3，MLP=1e-4）
 
-#### 性能指標改善
-- 更平滑的訓練曲線
-- 更好的最終收斂效果
-- 增強的模型魯棒性
+### 6.3 輸出在哪裡
 
-**查看詳細改進**：參考 `GRADUAL_SURROGATE_README.md` 獲取完整技術說明。
+訓練完成後會在 `paper_checkpoints/` 看到：
+
+- `..._best.pth`：validation NRMSE 最佳
+- `..._last.pth`：最後一次 epoch
+
+---
+
+## 7. WandB（實驗紀錄）
+
+訓練預設會呼叫 `wandb.init(...)`。
+
+你可以：
+
+1) 正常登入使用
+
+```bash
+wandb login
+```
+
+2) 不想上傳（離線/關閉 WandB）
+
+Windows PowerShell：
+
+```bash
+$env:WANDB_MODE="disabled"
+python train_unified.py --model-arch cnn2 --use-loss pure --data-fraction 0.25 --nk 5 --np 5 --nf 5
+```
+
+（或設定環境變數 `WANDB_API_KEY` 讓它自動登入。）
+
+---
+
+## 8. 評估：verify_comparison.py
+
+這支腳本會：
+
+- 讀 `test_data.npz`
+- 載入 `paper_checkpoints/` 內指定的模型檔
+- 產出不同 data fraction 的 Pure vs Physical 對照表（NRMSE / R² / ...）
+
+執行：
+
+```bash
+python verify_comparison.py
+```
+
+備註：目前 `verify_comparison.py` 裡面的 `model_files` 是手動列出檔名；如果你訓練了新模型，要把檔名加進去才會被評估。
+
+---
+
+## 9. 常見問題（Troubleshooting）
+
+### 9.1 找不到資料檔
+
+確認根目錄存在：`train_data.npz` / `val_data.npz` / `test_data.npz`。
+如果檔名不同，請改 [model/config.py](model/config.py) 的 `TRAIN_PATH / VAL_PATH / TEST_PATH`。
+
+### 9.2 ImportError: 找不到 'model'
+
+請確認你是在「專案根目錄」執行：
+
+```bash
+python train_unified.py ...
+```
+
+### 9.3 沒 GPU 可以跑嗎？
+
+可以，程式會自動選擇 `cpu`。但訓練速度會明顯變慢。
+
+### 9.4 `--phys-gradual` 看起來無法關掉？
+
+目前 `train_unified.py` 裡 `--phys-gradual` 的 argparse 設定是 `action='store_true'` 且 `default=True`，因此它預設就會是 True。
+如果你真的需要「完全固定 λ」的版本，可以再把 argparse 的 default 改成 False（或改成 `--no-phys-gradual` 風格）。
+
+---
+
+## 10. 快速檢查 NPZ（可選）
+
+你可以用 [inspect_turing_npz.py](inspect_turing_npz.py) 快速查看 `.npz` 的 keys 與 shape。
+注意：該檔案內的 `NPZ_PATH` 可能需要你自己改成目前存在的 npz 檔名。
