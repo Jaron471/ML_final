@@ -123,6 +123,37 @@ class PaperMinimalCNN2MaxPool(nn.Module):
         x = self.fc_out(x)
         return torch.sigmoid(x)
 
+
+# --- MLP (Regression Baseline) ---
+class MLPNet(nn.Module):
+    def __init__(self, input_size=128*128):
+        super(MLPNet, self).__init__()
+        
+        self.net = nn.Sequential(
+            nn.Flatten(), # 把 (1, 128, 128) 壓扁成 (16384)
+            
+            # 第一層：輸入層 -> 隱藏層
+            nn.Linear(input_size, 1024),
+            nn.ReLU(),
+            nn.Dropout(0.2), # 防止過擬合
+            
+            # 第二層
+            nn.Linear(1024, 512),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            
+            # 第三層
+            nn.Linear(512, 128),
+            nn.ReLU(),
+            
+            # 輸出層 (4個參數)
+            nn.Linear(128, 4),
+            nn.Sigmoid() # 限制在 0~1 (配合 Scaler)
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
 # ==========================================
 # 2. 訓練流程 (加入 PINN + Scheduler + Data Fraction)
 # ==========================================
@@ -177,6 +208,9 @@ def train(args):
         model = PaperMinimalCNN2(nk=args.nk, np_size=args.np, nf=args.nf, input_size=128).to(config.DEVICE)
     elif args.model_type == 'cnn2pool':
         model = PaperMinimalCNN2MaxPool(nk=args.nk, np_size=args.np, nf=args.nf, input_size=128).to(config.DEVICE)
+    elif args.model_type == 'mlp':
+        # MLP expects flattened 128x128 input
+        model = MLPNet(input_size=128*128).to(config.DEVICE)
     else:
         raise ValueError(f"Unknown model type: {args.model_type}")
     
@@ -327,7 +361,7 @@ def train(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # 模型參數
-    parser.add_argument('--model-type', type=str, default='cnn2', choices=['cnn1', 'cnn2', 'cnn2pool'], help='Model architecture: cnn1 (original), cnn2 (2 layers), cnn2pool (2 layers + maxpool)')
+    parser.add_argument('--model-type', type=str, default='cnn2', choices=['cnn1', 'cnn2', 'cnn2pool', 'mlp'], help='Model architecture: cnn1, cnn2, cnn2pool, or mlp')
     parser.add_argument('--nk', type=int, default=5, help='Number of kernels')
     parser.add_argument('--np', type=int, default=5, help='Kernel size')
     parser.add_argument('--nf', type=int, default=5, help='Hidden neurons')
@@ -351,3 +385,5 @@ if __name__ == "__main__":
 ###    python train_paper_pinn.py --use-loss pure --data-fraction 0.6 --nk 5 --np 7 --nf 5
 ### 2.  **PINN (5% 數據):**
 ###    python train_paper_pinn.py --use-loss physical --data-fraction 0.05 --nk 5 --np 5 --nf 5 --phys-gradual
+### 2.  **PINN+CNN2 (5% 數據):**
+###    python train_paper_pinn.py --model-type cnn2 --use-loss pure --data-fraction 0.6 --nk 5 --np 5 --nf 5

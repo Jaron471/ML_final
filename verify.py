@@ -1,243 +1,333 @@
 import os
 import sys
-import argparse
+import re
 import torch
-from torch.utils.data import DataLoader
+import torch.nn as nn
 import numpy as np
-from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
+import pandas as pd
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-# Setup environment
+# ==========================
+# 0. 環境與路徑設定
+# ==========================
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 
-# Import modules
-from model import config
-from model.dataset import TuringDataset
-from model.model import ParameterNet, MLPNet, PaperCNN
-from model.utils import calculate_multidim_nrmse, find_model_path
+try:
+    from model import config
+    from model.dataset import TuringDataset
+except ImportError:
+    print("❌ 錯誤: 找不到 'model' 模組。請確保你的專案目錄結構正確。")
+    sys.exit(1)
 
 # ==========================================
-# Default Configuration
+# 1. 模型定義 (必須與訓練時一致)
 # ==========================================
-DEFAULT_MODEL_TYPE = "CNN"           # CNN / MLP / PaperCNN
-DEFAULT_LOSS_TYPE = "physical"       # pure / physical / surrogate-{num}
-DEFAULT_NUM = None                   # None = Latest, or integer
-DEFAULT_SUFFIX = "last"              # best / last
-DEFAULT_DATA_FRACTION = 1.0          # Data fraction used in training (for reference)
+class PaperMinimalCNN(nn.Module):
+    def __init__(self, nk=5, np_size=5, nf=5, input_size=128):
+        super(PaperMinimalCNN, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
+        out_dim = input_size - np_size + 1
+        self.flat_features = nk * out_dim * out_dim
+        self.fc1 = nn.Linear(self.flat_features, nf)
+        self.fc_out = nn.Linear(nf, 4)
 
-def calculate_metrics(targets, preds, scaler=None):
-    """Calculate R2, MAE, RMSE, NRMSE for each parameter"""
+    def forward(self, x):
+        x = torch.relu(self.conv1(x))
+        x = x.view(x.size(0), -1) 
+        x = torch.relu(self.fc1(x))
+        x = self.fc_out(x)
+        return torch.sigmoid(x)
+
+class PaperMinimalCNN2(nn.Module):
+    def __init__(self, nk=5, np_size=5, nf=5, input_size=128):
+        super(PaperMinimalCNN2, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
+        self.conv2 = nn.Conv2d(in_channels=nk, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
+        
+        # Calculate output dimension
+        d1 = input_size - np_size + 1
+        d2 = d1 - np_size + 1
+        self.flat_features = nk * d2 * d2
+        
+        self.fc1 = nn.Linear(self.flat_features, nf)
+        self.fc_out = nn.Linear(nf, 4) 
+
+    def forward(self, x):
+        x = torch.relu(self.conv1(x))
+        x = torch.relu(self.conv2(x))
+        x = x.view(x.size(0), -1)
+        x = torch.relu(self.fc1(x))
+        x = self.fc_out(x)
+        return torch.sigmoid(x)
+
+class PaperMinimalCNN2MaxPool(nn.Module):
+    def __init__(self, nk=5, np_size=5, nf=5, input_size=128):
+        super(PaperMinimalCNN2MaxPool, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.conv2 = nn.Conv2d(in_channels=nk, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
+        
+        # Calculate output dimension
+        d1 = input_size - np_size + 1
+        d2 = d1 // 2
+        d3 = d2 - np_size + 1
+        d4 = d3 // 2
+        self.flat_features = nk * d4 * d4
+        
+        self.fc1 = nn.Linear(self.flat_features, nf)
+        self.fc_out = nn.Linear(nf, 4) 
+
+    def forward(self, x):
+        x = torch.relu(self.conv1(x))
+        x = self.pool1(x)
+        x = torch.relu(self.conv2(x))
+        x = self.pool2(x)
+        x = x.view(x.size(0), -1)
+        x = torch.relu(self.fc1(x))
+        x = self.fc_out(x)
+        return torch.sigmoid(x)
+
+# ==========================================
+# 2. 多元評估指標計算函式
+# ==========================================
+def calculate_metrics(targets_norm, preds_norm, scaler=None):
     metrics = {}
     param_names = ['a', 'b', 'c', 'delta']
+    epsilon = 1e-8
     
-    # 1. 在正規化空間 [0,1] 計算基礎指標
+    # 準備物理數值用於計算 MAPE
+    if scaler:
+        targets_real = scaler.inverse_transform_numpy(targets_norm)
+        preds_real = scaler.inverse_transform_numpy(preds_norm)
+    else:
+        targets_real = targets_norm
+        preds_real = preds_norm
+
+    # 個別參數計算
     for i, name in enumerate(param_names):
-        metrics[f'R2_{name}'] = r2_score(targets[:, i], preds[:, i])
-        metrics[f'MAE_{name}'] = mean_absolute_error(targets[:, i], preds[:, i])
-        metrics[f'RMSE_{name}'] = np.sqrt(mean_squared_error(targets[:, i], preds[:, i]))
+        y_true = targets_norm[:, i]
+        y_pred = preds_norm[:, i]
+        
+        # NRMSE (維持在 Normalized Space)
+        metrics[f'NRMSE_{name}'] = np.sqrt(np.mean((y_true - y_pred)**2))
+        
+        # R2 Score
+        ss_res = np.sum((y_true - y_pred)**2)
+        ss_tot = np.sum((y_true - np.mean(y_true))**2)
+        if ss_tot == 0: ss_tot = epsilon
+        metrics[f'R2_{name}'] = 1 - (ss_res / ss_tot)
+        
+        # MAPE (改用 Physical Space)
+        y_true_real = targets_real[:, i]
+        y_pred_real = preds_real[:, i]
+        metrics[f'MAPE_{name}'] = np.mean(np.abs((y_true_real - y_pred_real) / (y_true_real + epsilon))) * 100
+
+    # 整體指標
+    # 1. Joint NRMSE
+    num_elements = targets_norm.size
+    total_sse = np.sum((targets_norm - preds_norm)**2)
+    global_rmse = np.sqrt(total_sse / num_elements)
+    y_mean_vec = np.mean(targets_norm, axis=0)
+    norm_y_mean = np.linalg.norm(y_mean_vec)
+    metrics['NRMSE_Joint'] = global_rmse / norm_y_mean if norm_y_mean != 0 else 0.0
+
+    # 2. Mean R2
+    metrics['R2_Mean'] = np.mean([metrics[f'R2_{n}'] for n in param_names])
     
-    # Aggregate metrics
-    metrics['R2_avg'] = np.mean([metrics[f'R2_{n}'] for n in param_names])
-    metrics['MAE_avg'] = np.mean([metrics[f'MAE_{n}'] for n in param_names])
-    metrics['RMSE_avg'] = np.mean([metrics[f'RMSE_{n}'] for n in param_names])
-    
-    # 2. Multi-dim NRMSE (Paper definition) - 這是最重要的總體指標
-    # NRMSE 計算時，分母(norm_y_mean)的大小取決於數據分佈
-    metrics['NRMSE_multi'] = calculate_multidim_nrmse(targets, preds)
-    
-    # 3. Per-parameter NRMSE
-    y_mean_vector = np.mean(targets, axis=0)
-    norm_y_mean = np.linalg.norm(y_mean_vector)
-    
-    for i, name in enumerate(param_names):
-        metrics[f'NRMSE_{name}'] = metrics[f'RMSE_{name}'] / norm_y_mean if norm_y_mean != 0 else 0.0
+    # 3. Mean MAPE
+    metrics['MAPE_Mean'] = np.mean([metrics[f'MAPE_{n}'] for n in param_names])
     
     return metrics
 
+# ==========================================
+# 3. 輔助函式：生成單一指標報表
+# ==========================================
+def generate_metric_report(comparison_results, metric_key, title, unit="", higher_is_better=False):
+    print("\n" + "="*80)
+    print(f"📊 {title}")
+    print("="*80)
+    
+    table_data = []
+    
+    for frac in sorted(comparison_results.keys(), reverse=True):
+        res = comparison_results[frac]
+        pure_val = res.get('pure', {}).get(metric_key, np.nan)
+        phys_val = res.get('physical', {}).get(metric_key, np.nan)
+        
+        row = {'Data %': f"{frac:.1%}"}
+        
+        if unit == "%":
+            if "NRMSE" in metric_key:
+                row['Pure'] = f"{pure_val:.2%}" if not np.isnan(pure_val) else "-"
+                row['Phys'] = f"{phys_val:.2%}" if not np.isnan(phys_val) else "-"
+            else:
+                row['Pure'] = f"{pure_val:.2f}" if not np.isnan(pure_val) else "-"
+                row['Phys'] = f"{phys_val:.2f}" if not np.isnan(phys_val) else "-"
+        else:
+            row['Pure'] = f"{pure_val:.4f}" if not np.isnan(pure_val) else "-"
+            row['Phys'] = f"{phys_val:.4f}" if not np.isnan(phys_val) else "-"
+            
+        if not np.isnan(pure_val) and not np.isnan(phys_val):
+            if higher_is_better:
+                diff = phys_val - pure_val
+                row['Diff'] = f"{diff:+.4f}"
+                row['Winner'] = "Physical 🟢" if diff > 0 else "Pure 🔴"
+            else:
+                diff = pure_val - phys_val
+                imp = (diff / pure_val) * 100
+                row['Imp(%)'] = f"{imp:+.2f}%"
+                row['Winner'] = "Physical 🟢" if diff > 0 else "Pure 🔴"
+        else:
+            row['Diff/Imp'] = "-"
+            row['Winner'] = "-"
+            
+        table_data.append(row)
+        
+    df = pd.DataFrame(table_data)
+    print(df.to_string(index=False))
+
+# ==========================================
+# 4. 主程式流程
+# ==========================================
 def main():
-    parser = argparse.ArgumentParser(description="Verify Model Performance on Test Set")
-    parser.add_argument('--model-type', type=str, default=DEFAULT_MODEL_TYPE, choices=['CNN', 'MLP', 'PaperCNN'], help='Model architecture')
-    parser.add_argument('--loss-type', type=str, default=DEFAULT_LOSS_TYPE, help='Loss type used in training (e.g., pure, physical, surrogate-1, surrogate-2)')
-    parser.add_argument('--num', type=int, default=DEFAULT_NUM, help='Training run number (default: latest)')
-    parser.add_argument('--suffix', type=str, default=DEFAULT_SUFFIX, choices=['best', 'last'], help='Which checkpoint to load')
-    parser.add_argument('--data-fraction', type=float, default=DEFAULT_DATA_FRACTION, help='Data fraction used in training (for reference, does not affect loading)')
-    parser.add_argument('--model-path', type=str, default=None, help='Direct path to model (overrides auto-search)')
+    # 設定路徑 (如果 test_data.npz 不存在，會嘗試使用 config.NPZ_PATH)
+    TEST_PATH = "test_data.npz"
+    CKPT_DIR = "paper_checkpoints"
     
-    args = parser.parse_args()
+    # 📝 在這裡填入你要比較的模型檔案
+    model_files = [
+        "PaperPINN_cnn2_physical_nk5_frac1.0_27_best.pth",
+        "PaperPINN_cnn2_pure_nk5_frac1.0_26_best.pth",
+        "PaperPINN_cnn2pool_physical_nk5_frac1.0_28_best.pth",
+        "PaperPINN_cnn2pool_pure_nk5_frac1.0_29_best.pth"
+    ]
 
-    # ==========================================
-    # 1. Load Data (Modified for separate files)
-    # ==========================================
-    print(f"📦 Loading Test Data from: {config.TEST_PATH}")
-    
-    # 載入測試集
-    test_dataset = TuringDataset(config.TEST_PATH)
-    
-    # [Optional but Recommended] 確保 Scaler 一致性
-    # 嚴謹的做法是使用 "Training Set" 的 min/max 來還原數值
-    # 如果不這樣做，Test set 自己的 min/max 可能會導致 0.1% 的誤差
-    try:
-        if os.path.exists(config.TRAIN_PATH):
-            print(f"⚖️  Loading scaler reference from: {config.TRAIN_PATH}")
-            train_dataset = TuringDataset(config.TRAIN_PATH)
-            
-            # 強制將測試集的 Scaler 替換為訓練集的 Scaler
-            # 注意：TuringDataset 在 init 時已經轉換了 params_norm，
-            # 所以如果這裡換了 scaler，理論上應該要重新 transform params_norm。
-            # 但因為 train/test 分佈極為接近，這裡我們只替換 scaler 物件以供 inverse_transform 使用。
-            test_dataset.scaler = train_dataset.scaler
-    except Exception as e:
-        print(f"⚠️  Warning: Could not load training scaler ({e}). Using test set scaler.")
-
-    loader = DataLoader(test_dataset, batch_size=config.BATCH_SIZE, shuffle=False)
-    print(f"📊 Test set size: {len(test_dataset)}")
-
-    # ==========================================
-    # 2. Find and Load Model
-    # ==========================================
-    # Resolve Model Path
-    if args.model_path:
-        model_path = args.model_path
-    else:
-        ckpt_dir = "checkpoint"
-        # 這裡的 Regex 必須配合 train.py 的存檔命名規則
-        # Pattern example: CNN_physical_1_frac1.0_wandbname_best.pth
-        # 或者: CNN_surrogate-1_5_frac1.0_wandbname_best.pth
-        pattern_regex = f"{args.model_type}_{args.loss_type}_(?P<num>\\d+)_.*_{args.suffix}\\.pth"
-        
-        model_path = find_model_path(ckpt_dir, pattern_regex, version=args.num)
-        
-        if model_path is None:
-            print(f"❌ Could not find model matching: {pattern_regex}")
-            print(f"   In directory: {os.path.abspath(ckpt_dir)}")
-            print(f"   💡 Tip: For surrogate models, use format 'surrogate-N' where N is the surrogate version number")
-            sys.exit(1)
-
-    print(f"🔍 Verifying model: {os.path.basename(model_path)}")
-    print(f"🏗️  Architecture: {args.model_type}")
-    
-    # Parse additional info from filename for reference
-    filename = os.path.basename(model_path)
-    import re
-    
-    # Extract data fraction
-    frac_match = re.search(r'_frac([\d.]+)_', filename)
-    if frac_match:
-        data_fraction = float(frac_match.group(1))
-        print(f"📊 Training data fraction: {data_fraction:.1%}")
-    else:
-        print(f"📊 Training data fraction: Unknown (using default {args.data_fraction:.1%})")
-    
-    # Extract PaperCNN parameters if applicable
-    if args.model_type == "PaperCNN":
-        param_match = re.search(r'_nk(\d+)_np(\d+)_nf(\d+)_', filename)
-        if param_match:
-            nk, np_size, nf = map(int, param_match.groups())
-            print(f"📐 PaperCNN parameters: nk={nk}, np={np_size}, nf={nf}")
+    print(f"📦 Loading Test Data from: {TEST_PATH}")
+    if not os.path.exists(TEST_PATH):
+        if hasattr(config, 'NPZ_PATH') and os.path.exists(config.NPZ_PATH):
+            print(f"⚠️  {TEST_PATH} not found. Using config.NPZ_PATH: {config.NPZ_PATH}")
+            TEST_PATH = config.NPZ_PATH
         else:
-            print("⚠️  Could not parse PaperCNN parameters from filename")
+            print(f"❌ Error: Cannot find test data file.")
+            return
+            
+    dataset = TuringDataset(TEST_PATH)
+    loader = DataLoader(dataset, batch_size=config.BATCH_SIZE, shuffle=False)
+    
+    # Structure: results[model_arch][frac][loss_type] = metrics
+    comparison_results = {}
 
-    # Initialize Model
-    if args.model_type == "CNN":
-        model = ParameterNet().to(config.DEVICE)
-    elif args.model_type == "MLP":
-        model = MLPNet().to(config.DEVICE)
-    elif args.model_type == "PaperCNN":
-        # Parse PaperCNN parameters from model filename
-        # Expected format: PaperCNN_*_nk{NK}_np{NP}_nf{NF}_*_{suffix}.pth
-        import re
-        filename = os.path.basename(model_path)
-        match = re.search(r'_nk(\d+)_np(\d+)_nf(\d+)_', filename)
+    print("\n🚀 Starting Evaluation...")
+    
+    for filename in sorted(model_files):
+        filepath = os.path.join(CKPT_DIR, filename)
+        if not os.path.exists(filepath):
+            # 嘗試在當前目錄尋找 (防呆)
+            filepath = filename
+            if not os.path.exists(filepath):
+                print(f"❌ File not found: {filename}")
+                continue
+        
+        # Regex 解析檔名
+        # 格式: PaperPINN_{model_type}_{loss_type}_nk...
+        match = re.search(r'PaperPINN_(?P<model>[a-zA-Z0-9]+)_(?P<loss>pure|physical)_nk(?P<nk>\d+)_frac(?P<frac>[\d\.]+)_', filename)
+        
         if match:
-            nk, np_size, nf = map(int, match.groups())
-            print(f"📐 PaperCNN parameters: nk={nk}, np={np_size}, nf={nf}")
+            model_arch = match.group('model')
+            loss_type = match.group('loss')
+            frac = float(match.group('frac'))
         else:
-            # Fallback to defaults if parsing fails
-            nk, np_size, nf = 5, 5, 5
-            print(f"⚠️  Could not parse PaperCNN parameters from filename, using defaults: nk={nk}, np={np_size}, nf={nf}")
+            print(f"⚠️  Cannot parse filename info: {filename}, skipping.")
+            continue
+            
+        print(f"Processing: {filename}")
+        print(f"   -> Arch: {model_arch}, Loss: {loss_type}, Frac: {frac}")
+
+        # 根據架構名稱實例化模型
+        if model_arch == 'cnn1' or model_arch == 'physical' or model_arch == 'pure': 
+            # 兼容舊命名 (有些舊檔名沒有 model_type，regex 可能會誤判，這裡做個防呆)
+            # 如果 regex 解析出的 model 是 pure/physical，代表它是舊格式 cnn1
+            if model_arch in ['pure', 'physical']: 
+                # 重新修正
+                loss_type = model_arch
+                model_arch = 'cnn1'
+            model = PaperMinimalCNN(nk=5, np_size=5, nf=5).to(config.DEVICE)
+            
+        elif model_arch == 'cnn2':
+            model = PaperMinimalCNN2(nk=5, np_size=5, nf=5).to(config.DEVICE)
+            
+        elif model_arch == 'cnn2pool':
+            model = PaperMinimalCNN2MaxPool(nk=5, np_size=5, nf=5).to(config.DEVICE)
+            
+        else:
+            print(f"⚠️ Unknown model architecture: {model_arch}, skipping.")
+            continue
+
+        try:
+            model.load_state_dict(torch.load(filepath, map_location=config.DEVICE))
+        except Exception as e:
+            print(f"❌ Failed to load weights: {e}")
+            continue
+            
+        model.eval()
+
+        all_preds, all_targets = [], []
+        with torch.no_grad():
+            for u_batch, _, params_target in loader:
+                u_batch = u_batch.to(config.DEVICE)
+                u_input = u_batch[:, 0:1, :, :] if u_batch.shape[1] > 1 else u_batch
+                preds = model(u_input)
+                all_preds.append(preds.cpu().numpy())
+                all_targets.append(params_target.numpy())
         
-        model = PaperCNN(nk=nk, np_size=np_size, nf=nf).to(config.DEVICE)
-    
-    # Load Weights
-    try:
-        model.load_state_dict(torch.load(model_path, map_location=config.DEVICE))
-        print("✅ Model loaded successfully")
-    except Exception as e:
-        print(f"❌ Error loading model weights: {e}")
-        sys.exit(1)
+        all_preds = np.vstack(all_preds)
+        all_targets = np.vstack(all_targets)
+        
+        metrics = calculate_metrics(all_targets, all_preds, scaler=dataset.scaler)
+        
+        if model_arch not in comparison_results: comparison_results[model_arch] = {}
+        if frac not in comparison_results[model_arch]: comparison_results[model_arch][frac] = {}
+        comparison_results[model_arch][frac][loss_type] = metrics
 
-    model.eval()
+    # 生成報表
+    for model_arch, results in comparison_results.items():
+        print("\n" + "#"*80)
+        print(f"🏆 FINAL COMPARISON REPORT: {model_arch}")
+        print("#"*80)
 
-    # ==========================================
-    # 3. Inference Loop
-    # ==========================================
-    all_preds_norm = []
-    all_targets_norm = []
-    
-    # 用於顯示真實數值的誤差 (Optional)
-    all_preds_real = []
-    all_targets_real = []
-    
-    print("🚀 Running inference on Test Set...")
-    with torch.no_grad():
-        for u_batch, _, params_target in tqdm(loader):
-            u_batch = u_batch.to(config.DEVICE)
-            
-            # Predict
-            preds_norm = model(u_batch)
-            
-            # CPU conversion
-            preds_norm_np = preds_norm.cpu().numpy()
-            targets_norm_np = params_target.numpy()
-            
-            all_preds_norm.append(preds_norm_np)
-            all_targets_norm.append(targets_norm_np)
-            
-            # Inverse Transform (還原成物理數值)
-            preds_real = test_dataset.scaler.inverse_transform_numpy(preds_norm_np)
-            targets_real = test_dataset.scaler.inverse_transform_numpy(targets_norm_np)
-            
-            all_preds_real.append(preds_real)
-            all_targets_real.append(targets_real)
+        # 1. NRMSE Table
+        generate_metric_report(
+            results, 
+            metric_key='NRMSE_Joint', 
+            title=f"[{model_arch}] Joint NRMSE Comparison (Lower is Better)", 
+            unit="%", 
+            higher_is_better=False
+        )
 
-    # Stack results
-    all_preds_norm = np.vstack(all_preds_norm)
-    all_targets_norm = np.vstack(all_targets_norm)
-    all_preds_real = np.vstack(all_preds_real)
-    all_targets_real = np.vstack(all_targets_real)
+        # 2. R2 Score Table
+        generate_metric_report(
+            results, 
+            metric_key='R2_Mean', 
+            title=f"[{model_arch}] Mean R² Score Comparison (Higher is Better)", 
+            unit="", 
+            higher_is_better=True
+        )
+        
+        # 3. MAPE Table
+        generate_metric_report(
+            results, 
+            metric_key='MAPE_Mean', 
+            title=f"[{model_arch}] Mean MAPE Comparison (Lower is Better)", 
+            unit="%", 
+            higher_is_better=False
+        )
 
-    # ==========================================
-    # 4. Calculate & Report Metrics
-    # ==========================================
-    # 我們主要關注 Normalized Space 的指標 (與訓練 Loss 一致)
-    metrics = calculate_metrics(all_targets_norm, all_preds_norm)
-
-    print("\n" + "="*60)
-    print(f"📊 Evaluation Results (Test Set N={len(test_dataset)})")
-    print("="*60)
-    
-    print(f"{'Metric':<20} {'Value':<10}")
-    print("-" * 40)
-    # NRMSE Multi 是論文常用的主要指標
-    print(f"{'NRMSE (Multi)':<20} {metrics['NRMSE_multi']:.2%}  <-- Key Metric") 
-    print(f"{'R2 (Avg)':<20} {metrics['R2_avg']:.4f}")
-    print(f"{'MAE (Avg)':<20} {metrics['MAE_avg']:.4f}")
-    print("-" * 40)
-    
-    print("\nDetailed Metrics per Parameter (Normalized Space):")
-    print(f"{'Param':<8} {'R2':<10} {'MAE':<10} {'RMSE':<10} {'NRMSE':<10}")
-    print("-" * 55)
-    for name in ['a', 'b', 'c', 'delta']:
-        print(f"{name:<8} {metrics[f'R2_{name}']:<10.4f} {metrics[f'MAE_{name}']:<10.4f} "
-              f"{metrics[f'RMSE_{name}']:<10.4f} {metrics[f'NRMSE_{name}']:<10.2%}")
-    print("="*60)
-    
-    # 額外顯示真實物理數值的平均誤差 (讓人類比較有感)
-    mae_real = np.mean(np.abs(all_targets_real - all_preds_real), axis=0)
-    print("\n[Reference] Mean Absolute Error in Physics Domain:")
-    print(f"a: {mae_real[0]:.5f}, b: {mae_real[1]:.5f}, c: {mae_real[2]:.5f}, delta: {mae_real[3]:.5f}")
+    print("\n" + "#"*80)
+    print("Done.")
 
 if __name__ == "__main__":
     main()
