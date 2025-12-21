@@ -236,7 +236,7 @@ def train(args):
     val_loader = DataLoader(val_set, batch_size=config.BATCH_SIZE, shuffle=False)
     
     # 2. Model Setup
-    is_cnn = args.model_arch in ['cnn1', 'cnn2', 'cnn2pool']
+    is_cnn = args.model_arch in ['cnn1', 'cnn2', 'cnn2pool', 'cnn2stride']
     
     if args.model_arch == 'mlp':
         model = MLPNet().to(config.DEVICE)
@@ -246,6 +246,8 @@ def train(args):
         model = PaperMinimalCNN2(nk=args.nk, np_size=args.np, nf=args.nf, input_size=128).to(config.DEVICE)
     elif args.model_arch == 'cnn2pool':
         model = PaperMinimalCNN2MaxPool(nk=args.nk, np_size=args.np, nf=args.nf, input_size=128).to(config.DEVICE)
+    elif args.model_arch == 'cnn2stride':
+        model = PaperMinimalCNN2Stride(nk=args.nk, np_size=args.np, nf=args.nf, input_size=128).to(config.DEVICE)
     else:
         raise ValueError(f"Unknown model architecture: {args.model_arch}")
     
@@ -451,8 +453,8 @@ def main():
     
     # Model Architecture
     parser.add_argument('--model-arch', type=str, default='mlp', 
-                        choices=['mlp', 'cnn1', 'cnn2', 'cnn2pool'],
-                        help='Model architecture: mlp, cnn1 (1-layer), cnn2 (2-layer), cnn2pool (2-layer+maxpool)')
+                        choices=['mlp', 'cnn1', 'cnn2', 'cnn2pool', 'cnn2stride'],
+                        help='Model architecture: mlp, cnn1 (1-layer), cnn2 (2-layer), cnn2pool (2-layer+maxpool), cnn2stride (2-layer+stride)')
     
     # CNN-specific parameters
     parser.add_argument('--nk', type=int, default=5, help='Number of kernels (CNN only)')
@@ -479,7 +481,7 @@ def main():
     
     # Set default learning rate based on model architecture
     if args.lr is None:
-        args.lr = 1e-3 if args.model_arch in ['cnn1', 'cnn2', 'cnn2pool'] else 1e-4
+        args.lr = 1e-3 if args.model_arch in ['cnn1', 'cnn2', 'cnn2pool', 'cnn2stride'] else 1e-4
     
     set_seed(42)
     
