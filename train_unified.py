@@ -463,7 +463,7 @@ def main():
     parser.add_argument('--nf', type=int, default=5, help='Hidden neurons (CNN only)')
     
     # Training parameters
-    parser.add_argument('--use-loss', type=str, default='physical', 
+    parser.add_argument('--use-loss', type=str, default='pure', 
                         choices=['pure', 'physical'],
                         help='Loss type: pure (supervised) or physical (PINN)')
     parser.add_argument('--lambda-phy', type=float, default=0.01, help='Weight for physics loss')

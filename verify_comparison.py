@@ -262,6 +262,8 @@ def main():
         "PaperPINN_physical_nk5_frac0.375_28_best.pth",
         "PaperPINN_pure_nk5_frac0.375_29_best.pth",
         "PaperPINN_physical_nk5_frac1.0_25_best_11.77_Rmask.pth",
+        "PaperPINN_CNN1_physical_nk5_frac0.1_1_best.pth",
+        "PaperPINN_CNN1_pure_nk5_frac0.1_1_best.pth",
     ]
 
     print(f"📦 Loading Test Data from: {TEST_PATH}")
@@ -296,7 +298,7 @@ def main():
         match_old = re.search(r'PaperPINN_(?P<loss>pure|physical)_nk(?P<nk>\d+)_frac(?P<frac>[\d\.]+)_', filename)
         
         if match_new:
-            model_arch = match_new.group('model')
+            model_arch = match_new.group('model').lower()
             loss_type = match_new.group('loss')
             frac = float(match_new.group('frac'))
         elif match_old:
