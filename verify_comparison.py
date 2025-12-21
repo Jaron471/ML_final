@@ -194,7 +194,11 @@ def generate_metric_report(comparison_results, metric_key, title, unit="", highe
                 row['Imp(%)'] = f"{imp:+.2f}%"
                 row['Winner'] = "Physical 🟢" if diff > 0 else "Pure 🔴"
         else:
-            row['Diff/Imp'] = "-"
+            # Use consistent column names based on metric type
+            if higher_is_better:
+                row['Diff'] = "-"
+            else:
+                row['Imp(%)'] = "-"
             row['Winner'] = "-"
             
         table_data.append(row)
@@ -212,12 +216,14 @@ def main():
     model_files = [
         "PaperPINN_physical_nk5_frac1.0_7_best_11.72.pth",
         "PaperPINN_physical_nk5_frac0.6_1_best_12.88.pth",
+        "PaperPINN_physical_nk5_frac0.375_28_best.pth",
         "PaperPINN_physical_nk5_frac0.25_3_best_16.91.pth",
         "PaperPINN_physical_nk5_frac0.1875_16_best_16.62.pth",
         "PaperPINN_physical_nk5_frac0.125_5_best_18.49.pth",
         "PaperPINN_physical_nk5_frac0.0125_9_best_19.50.pth",
         "PaperPINN_pure_nk5_frac1.0_8_best_11.89.pth",
         "PaperPINN_pure_nk5_frac0.6_2_best_13.06.pth",
+        "PaperPINN_pure_nk5_frac0.375_21_best_14.01.pth",
         "PaperPINN_pure_nk5_frac0.25_4_best_17.92.pth",
         "PaperPINN_pure_nk5_frac0.1875_17_best_18.55.pth",
         "PaperPINN_pure_nk5_frac0.125_6_best_18.68.pth",
@@ -261,6 +267,11 @@ def main():
             continue
             
         print(f"Processing: {filename} -> Arch: {model_arch}, Loss: {loss_type}, Frac: {frac}")
+        
+        # Check file existence
+        if not os.path.exists(filepath):
+            print(f"⚠️ File not found: {filepath}, skipping.")
+            continue
 
         # Instantiate correct model
         if model_arch == 'cnn1':
@@ -274,7 +285,7 @@ def main():
             continue
 
         try:
-            model.load_state_dict(torch.load(filepath, map_location=config.DEVICE))
+            model.load_state_dict(torch.load(filepath, map_location=config.DEVICE, weights_only=False))
         except Exception as e:
             print(f"❌ Failed to load {filename}: {e}")
             continue
@@ -321,15 +332,6 @@ def main():
             title=f"[{model_arch}] Mean R² Score Comparison (Higher is Better)", 
             unit="", 
             higher_is_better=True
-        )
-        
-        # 3. MAPE Table
-        generate_metric_report(
-            results, 
-            metric_key='MAPE_Mean', 
-            title=f"[{model_arch}] Mean MAPE Comparison (Lower is Better)", 
-            unit="%", 
-            higher_is_better=False
         )
 
     print("\n" + "#"*80)
