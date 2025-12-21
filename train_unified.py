@@ -121,6 +121,32 @@ class PaperMinimalCNN2MaxPool(nn.Module):
         return torch.sigmoid(x)
 
 
+class PaperMinimalCNN2Stride(nn.Module):
+    def __init__(self, nk=5, np_size=5, nf=5, input_size=128):
+        super(PaperMinimalCNN2Stride, self).__init__()
+        
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=nk, kernel_size=np_size, stride=2, padding=0)
+        self.conv2 = nn.Conv2d(in_channels=nk, out_channels=nk, kernel_size=np_size, stride=2, padding=0)
+        
+        # Calculate output dimension
+        # After Conv1 (stride 2)
+        d1 = (input_size - np_size) // 2 + 1
+        # After Conv2 (stride 2)
+        d2 = (d1 - np_size) // 2 + 1
+        
+        self.flat_features = nk * d2 * d2
+        
+        self.fc1 = nn.Linear(self.flat_features, nf)
+        self.fc_out = nn.Linear(nf, 4) 
+
+    def forward(self, x):
+        x = torch.relu(self.conv1(x))
+        x = torch.relu(self.conv2(x))
+        x = x.view(x.size(0), -1)
+        x = torch.relu(self.fc1(x))
+        x = self.fc_out(x)
+        return torch.sigmoid(x)
+
 # ==========================================
 # Validation Functions
 # ==========================================
