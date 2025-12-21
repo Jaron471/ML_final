@@ -294,9 +294,10 @@ def train(args):
     pattern_regex = f"{args.model_arch.upper()}_{args.use_loss}_(?P<num>\\d+)_.*\\.pth"
     current_num = get_next_version(ckpt_dir, pattern_regex)
     
-    base_filename = f"{args.model_arch.upper()}_{args.use_loss}_{current_num}_frac{args.data_fraction}"
+    base_filename = f"{args.model_arch.upper()}_{args.use_loss}"
     if args.model_arch != 'mlp':
         base_filename += f"_nk{args.nk}"
+    base_filename += f"_frac{args.data_fraction}_{current_num}"
     
     best_model_path = os.path.join(ckpt_dir, f"{base_filename}_best.pth")
     final_model_path = os.path.join(ckpt_dir, f"{base_filename}_last.pth")
