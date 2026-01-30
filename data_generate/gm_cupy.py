@@ -50,6 +50,8 @@ SEED      = 41
 PRACTICAL_TOLERANCE = 1e-6
 MAX_REL_CHANGE      = 1e-6
 CHECK_INTERVAL      = 200
+MIN_EVOLUTION_STEPS = 2000  # 最小演化步數，確保 Turing 不穩定性有時間發展
+MIN_PATTERN_STD     = 0.02  # 最小空間標準差，確保形成了斑紋
 
 # 檔案路徑
 PARAM_CSV   = "qualified_turing_params_20000.csv"
@@ -140,12 +142,18 @@ def simulate_gm_cupy(id, a, b, c, delta, u_star, v_star,
        u_next = cp.real(cp.fft.ifft2(U_hat_k_plus_1))
        v_next = cp.real(cp.fft.ifft2(V_hat_k_plus_1))
 
-       # Check Convergence (每隔一段時間檢查)
-       if (t + 1) % CHECK_INTERVAL == 0:
-           # 這裡需要一個同步點，計算 max diff
-           abs_diff = float(cp.max(cp.abs(u_next - u))) # float() 會觸發從 GPU 拉回 CPU 的同步
-          
-           if abs_diff < PRACTICAL_TOLERANCE:
+       # Chec計算時間變化
+           abs_diff = float(cp.max(cp.abs(u_next - u)))
+           
+           # 只有在最小演化步數之後才檢查收斂
+           if (t + 1) >= MIN_EVOLUTION_STEPS:
+               # 計算空間變異性
+               u_std = float(cp.std(u_next))
+               
+               # 收斂條件：時間變化小 AND 形成了斑紋
+               if abs_diff < PRACTICAL_TOLERANCE and u_std > MIN_PATTERN_STD:
+                   # 既收斂又有斑紋，成功！
+               if abs_diff < PRACTICAL_TOLERANCE:
                # 收斂，回傳結果 (轉回 CPU NumPy array)
                return cp.asnumpy(u_next), cp.asnumpy(v_next), t + 1
       
@@ -164,6 +172,7 @@ def run_one_row(row_dict):
    1. 接收參數
    2. 呼叫 GPU 模擬
    3. 將 GPU 結果轉回 CPU 並回傳
+   4. 驗證是否真正形成圖靈斑紋
    """
    try:
        pid = int(row_dict["id"])
@@ -173,12 +182,20 @@ def run_one_row(row_dict):
        u_star, v_star = calculate_gierer_meinhardt_steady_state(a_val, b_val, c_val)
        if u_star is None: return None
 
-       # GPU 模擬
-       u_res, v_res, steps = simulate_gm_cupy(
-           id=pid, a=a_val, b=b_val, c=c_val, delta=d_val,
-           u_star=u_star, v_star=v_star
-       )
-
+       # GPU 驗證最終結果 ===
+       u_std = np.std(u_res)
+       
+       # 最後檢查：如果演化到最大步數仍未形成斑紋，拒絕
+       if u_std < MIN_PATTERN_STD:
+           print(f"⚠️  ID {pid}: 達到最大步數但未形成斑紋 (std={u_std:.6f}, steps={steps
+       # 閾值：標準差和範圍都要足夠大，才算形成了斑紋
+       MIN_STD = 0.01
+       MIN_RANGE = 0.01
+       
+       if u_std < MIN_STD or u_range < MIN_RANGE:
+           print(f"⚠️  ID {pid}: 未形成斑紋 (std={u_std:.6f}, range={u_range:.6f}) - 已拒絕")
+           return None
+       
        # 這裡的 u_res, v_res 已經是 numpy array 了
        return {
            "id": pid, "a": a_val, "b": b_val, "c": c_val, "delta": d_val,

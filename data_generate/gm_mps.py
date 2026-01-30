@@ -55,15 +55,18 @@ SEED      = 41
 PRACTICAL_TOLERANCE = 1e-6
 MAX_REL_CHANGE      = 1e-6
 CHECK_INTERVAL      = 200
+MIN_EVOLUTION_STEPS = 2000  # 最小演化步數，確保 Turing 不穩定性有時間發展
+MIN_PATTERN_STD     = 0.02  # 最小空間標準差，確保形成了斑紋
 
 # 檔案路徑
-PARAM_CSV   = "qualified_turing_params_20000.csv"
-OUTPUT_FILENAME_BASE = "turing_patterns_dataset_mps"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PARAM_CSV   = os.path.join(SCRIPT_DIR, "qualified_turing_params_20000.csv")
+OUTPUT_FILENAME_BASE = os.path.join(SCRIPT_DIR, "turing_patterns_dataset_mps")
 
 # =============== 範圍設定 (手動調整這裡) ===============
 # 設定要執行的 CSV 行數範圍
-RANGE_START = 7000
-RANGE_END   = 10000   # 設為 None 代表跑到最後
+RANGE_START = 0
+RANGE_END   = 20000   # 設為 None 代表跑到最後
 
 # 設定平行工人的數量
 # ⚠️ 注意：MPS 在多進程下可能有限制，建議設為 1-2
@@ -142,12 +145,12 @@ def simulate_gm_mps(id, a, b, c, delta, u_star, v_star,
         u_next = torch.real(torch.fft.ifft2(U_hat_k_plus_1))
         v_next = torch.real(torch.fft.ifft2(V_hat_k_plus_1))
 
-        # Check Convergence (每隔一段時間檢查)
+        # 檢查收斂
         if (t + 1) % CHECK_INTERVAL == 0:
             abs_diff = float(torch.max(torch.abs(u_next - u)).item())
             
-            if abs_diff < PRACTICAL_TOLERANCE:
-                # 收斂，回傳結果 (轉回 CPU NumPy array)
+            # 只有在最小演化步數之後，且變化夠小，才視為收斂
+            if (t + 1) >= MIN_EVOLUTION_STEPS and abs_diff < PRACTICAL_TOLERANCE:
                 return u_next.cpu().numpy(), v_next.cpu().numpy(), t + 1
         
         u = u_next
@@ -165,6 +168,7 @@ def run_one_row(row_dict):
     1. 接收參數
     2. 呼叫 MPS 模擬
     3. 將 MPS 結果轉回 CPU 並回傳
+    4. 驗證是否真正形成圖靈斑紋
     """
     try:
         pid = int(row_dict["id"])
@@ -172,14 +176,26 @@ def run_one_row(row_dict):
 
         # 穩態計算 (CPU)
         u_star, v_star = calculate_gierer_meinhardt_steady_state(a_val, b_val, c_val)
-        if u_star is None: return None
-
-        # MPS 模擬
+        if u_star is None:
+            return None
+            
+        # 呼叫 MPS 模擬
         u_res, v_res, steps = simulate_gm_mps(
-            id=pid, a=a_val, b=b_val, c=c_val, delta=d_val,
-            u_star=u_star, v_star=v_star
+            pid, a_val, b_val, c_val, d_val, u_star, v_star,
+            seed=SEED+pid
         )
 
+        # 驗證最終結果
+        u_std = np.std(u_res)
+        u_range = np.max(u_res) - np.min(u_res)
+        
+        # 閾值：標準差和範圍都要足夠大，才算形成了斑紋
+        MIN_RANGE = 0.01
+        
+        if u_std < MIN_PATTERN_STD or u_range < MIN_RANGE:
+            # print(f"⚠️  ID {pid}: 未形成斑紋 (std={u_std:.6f}, range={u_range:.6f}) - 已拒絕")
+            return None
+        
         # 這裡的 u_res, v_res 已經是 numpy array 了
         return {
             "id": pid, "a": a_val, "b": b_val, "c": c_val, "delta": d_val,

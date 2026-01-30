@@ -3,6 +3,10 @@ import pandas as pd
 from scipy.optimize import fsolve
 import time
 
+# --- 隨機種子設定 (確保可重現性) ---
+SEED = 42
+np.random.seed(SEED)
+
 # --- 參數範圍 (基於論文 5.4 節) ---
 PARAM_RANGES = {
     'a': [0.01, 0.7],
@@ -127,7 +131,7 @@ def generate_qualified_turing_params(target_count=20000, output_filename='qualif
     return qualified_df
 
 # --- 執行範例 ---
-# 警告: 生成 20,000 筆合格參數「沒有固定隨機種子」，每次執行結果會不同。
+# 注意: 使用固定隨機種子 (SEED=42)，確保每次執行結果可重現。
 # 運行以下函式將生成並儲存檔案。
 
 # 執行生成 20,000 筆參數的任務

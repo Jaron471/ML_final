@@ -18,104 +18,13 @@ if sys.stdout.encoding != 'utf-8':
 try:
     from model import config
     from model.dataset import TuringDataset
-    from model.model import MLPNet
+    from model.model import MLPNet, PaperMinimalCNN, PaperMinimalCNN2, PaperMinimalCNN2MaxPool, PaperMinimalCNN2Stride
 except ImportError:
     print("❌ 錯誤: 找不到 'model' 模組。請確保你的專案目錄結構正確。")
     sys.exit(1)
 
 # ==========================================
-# 1. 模型定義
-# ==========================================
-class PaperMinimalCNN(nn.Module):
-    def __init__(self, nk=5, np_size=5, nf=5, input_size=128):
-        super(PaperMinimalCNN, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
-        out_dim = input_size - np_size + 1
-        self.flat_features = nk * out_dim * out_dim
-        self.fc1 = nn.Linear(self.flat_features, nf)
-        self.fc_out = nn.Linear(nf, 4)
-
-    def forward(self, x):
-        x = torch.relu(self.conv1(x))
-        x = x.view(x.size(0), -1) 
-        x = torch.relu(self.fc1(x))
-        x = self.fc_out(x)
-        return torch.sigmoid(x)
-
-class PaperMinimalCNN2(nn.Module):
-    def __init__(self, nk=5, np_size=5, nf=5, input_size=128):
-        super(PaperMinimalCNN2, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
-        self.conv2 = nn.Conv2d(in_channels=nk, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
-        out_dim = input_size - 2 * np_size + 2
-        self.flat_features = nk * out_dim * out_dim
-        self.fc1 = nn.Linear(self.flat_features, nf)
-        self.fc_out = nn.Linear(nf, 4) 
-
-    def forward(self, x):
-        x = torch.relu(self.conv1(x))
-        x = torch.relu(self.conv2(x))
-        x = x.view(x.size(0), -1)
-        x = torch.relu(self.fc1(x))
-        x = self.fc_out(x)
-        return torch.sigmoid(x)
-
-class PaperMinimalCNN2MaxPool(nn.Module):
-    def __init__(self, nk=5, np_size=5, nf=5, input_size=128):
-        super(PaperMinimalCNN2MaxPool, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
-        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.conv2 = nn.Conv2d(in_channels=nk, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
-        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
-        
-        # Calculate output dimension
-        d1 = input_size - np_size + 1
-        d2 = d1 // 2
-        d3 = d2 - np_size + 1
-        d4 = d3 // 2
-        self.flat_features = nk * d4 * d4
-        
-        self.fc1 = nn.Linear(self.flat_features, nf)
-        self.fc_out = nn.Linear(nf, 4) 
-
-    def forward(self, x):
-        x = torch.relu(self.conv1(x))
-        x = self.pool1(x)
-        x = torch.relu(self.conv2(x))
-        x = self.pool2(x)
-        x = x.view(x.size(0), -1)
-        x = torch.relu(self.fc1(x))
-        x = self.fc_out(x)
-        return torch.sigmoid(x)
-
-class PaperMinimalCNN2Stride(nn.Module):
-    def __init__(self, nk=5, np_size=5, nf=5, input_size=128):
-        super(PaperMinimalCNN2Stride, self).__init__()
-        
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=nk, kernel_size=np_size, stride=2, padding=0)
-        self.conv2 = nn.Conv2d(in_channels=nk, out_channels=nk, kernel_size=np_size, stride=2, padding=0)
-        
-        # Calculate output dimension
-        # After Conv1 (stride 2)
-        d1 = (input_size - np_size) // 2 + 1
-        # After Conv2 (stride 2)
-        d2 = (d1 - np_size) // 2 + 1
-        
-        self.flat_features = nk * d2 * d2
-        
-        self.fc1 = nn.Linear(self.flat_features, nf)
-        self.fc_out = nn.Linear(nf, 4) 
-
-    def forward(self, x):
-        x = torch.relu(self.conv1(x))
-        x = torch.relu(self.conv2(x))
-        x = x.view(x.size(0), -1)
-        x = torch.relu(self.fc1(x))
-        x = self.fc_out(x)
-        return torch.sigmoid(x)
-
-# ==========================================
-# 2. 多元評估指標計算函式
+# 1. 多元評估指標計算函式
 # ==========================================
 def calculate_metrics(targets_norm, preds_norm, scaler=None):
     metrics = {}

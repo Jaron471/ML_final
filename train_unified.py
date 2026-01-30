@@ -12,23 +12,23 @@ import wandb
 # Import modules
 from model import config
 from model.dataset import TuringDataset
-from model.model import MLPNet
+from model.model import MLPNet, PaperMinimalCNN, PaperMinimalCNN2, PaperMinimalCNN2MaxPool, PaperMinimalCNN2Stride
 from model.loss import PhysicsLoss, GradNorm
 from model.utils import calculate_multidim_nrmse, get_next_version
 
 # ==========================================
 # 使用範例:
-# 1. CNN pure (25% data): 
-#    python train_unified.py --model-arch cnn2 --use-loss pure --data-fraction 0.25 --nk 5 --np 5 --nf 5
+# 1. CNN pure (4000 樣本 = 3000 train + 1000 val): 
+#    python train_unified.py --model-arch cnn2 --use-loss pure --num-samples 4000 --nk 5 --np 5 --nf 5
 #
-# 2. CNN PINN (25% data): 
-#    python train_unified.py --model-arch cnn2 --use-loss physical --data-fraction 0.25 --nk 5 --np 5 --nf 5 --phys-gradual
+# 2. CNN PINN (4000 樣本): 
+#    python train_unified.py --model-arch cnn2 --use-loss physical --num-samples 4000 --nk 5 --np 5 --nf 5 --phys-gradual
 #
-# 3. MLP pure (10% data):
-#    python train_unified.py --model-arch mlp --use-loss pure --data-fraction 0.1
+# 3. MLP pure (1600 樣本):
+#    python train_unified.py --model-arch mlp --use-loss pure --num-samples 1600
 #
-# 4. MLP PINN (10% data):
-#    python train_unified.py --model-arch mlp --use-loss physical --data-fraction 0.1 --phys-gradual
+# 4. MLP PINN (全部 16000 樣本):
+#    python train_unified.py --model-arch mlp --use-loss physical --phys-gradual
 # ==========================================
 
 def set_seed(seed=42):
@@ -43,109 +43,6 @@ def set_seed(seed=42):
         torch.mps.manual_seed(seed)
     print(f"🔒 Random seed set to {seed} (Device: {config.DEVICE})")
 
-
-# ==========================================
-# CNN Models
-# ==========================================
-class PaperMinimalCNN(nn.Module):
-    """
-    [cite: 1820-1822] 實作論文中的極簡 CNN (nk/np/nf)
-    """
-    def __init__(self, nk=5, np_size=5, nf=5, input_size=128):
-        super(PaperMinimalCNN, self).__init__()
-        
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
-        
-        out_dim = input_size - np_size + 1
-        self.flat_features = nk * out_dim * out_dim
-        
-        self.fc1 = nn.Linear(self.flat_features, nf)
-        self.fc_out = nn.Linear(nf, 4) 
-
-    def forward(self, x):
-        x = torch.relu(self.conv1(x))
-        x = x.view(x.size(0), -1)
-        x = torch.relu(self.fc1(x))
-        x = self.fc_out(x)
-        return torch.sigmoid(x)
-    
-class PaperMinimalCNN2(nn.Module):
-    def __init__(self, nk=5, np_size=5, nf=5, input_size=128):
-        super(PaperMinimalCNN2, self).__init__()
-        
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
-        self.conv2 = nn.Conv2d(in_channels=nk, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
-        
-        out_dim = input_size - 2 * np_size + 2
-        self.flat_features = nk * out_dim * out_dim
-        
-        self.fc1 = nn.Linear(self.flat_features, nf)
-        self.fc_out = nn.Linear(nf, 4) 
-
-    def forward(self, x):
-        x = torch.relu(self.conv1(x))
-        x = torch.relu(self.conv2(x))
-        x = x.view(x.size(0), -1)
-        x = torch.relu(self.fc1(x))
-        x = self.fc_out(x)
-        return torch.sigmoid(x)
-
-class PaperMinimalCNN2MaxPool(nn.Module):
-    def __init__(self, nk=5, np_size=5, nf=5, input_size=128):
-        super(PaperMinimalCNN2MaxPool, self).__init__()
-        
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
-        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
-        
-        self.conv2 = nn.Conv2d(in_channels=nk, out_channels=nk, kernel_size=np_size, stride=1, padding=0)
-        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
-        
-        d1 = input_size - np_size + 1
-        d2 = d1 // 2
-        d3 = d2 - np_size + 1
-        d4 = d3 // 2
-        
-        self.flat_features = nk * d4 * d4
-        
-        self.fc1 = nn.Linear(self.flat_features, nf)
-        self.fc_out = nn.Linear(nf, 4) 
-
-    def forward(self, x):
-        x = torch.relu(self.conv1(x))
-        x = self.pool1(x)
-        x = torch.relu(self.conv2(x))
-        x = self.pool2(x)
-        x = x.view(x.size(0), -1)
-        x = torch.relu(self.fc1(x))
-        x = self.fc_out(x)
-        return torch.sigmoid(x)
-
-
-class PaperMinimalCNN2Stride(nn.Module):
-    def __init__(self, nk=5, np_size=5, nf=5, input_size=128):
-        super(PaperMinimalCNN2Stride, self).__init__()
-        
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=nk, kernel_size=np_size, stride=2, padding=0)
-        self.conv2 = nn.Conv2d(in_channels=nk, out_channels=nk, kernel_size=np_size, stride=2, padding=0)
-        
-        # Calculate output dimension
-        # After Conv1 (stride 2)
-        d1 = (input_size - np_size) // 2 + 1
-        # After Conv2 (stride 2)
-        d2 = (d1 - np_size) // 2 + 1
-        
-        self.flat_features = nk * d2 * d2
-        
-        self.fc1 = nn.Linear(self.flat_features, nf)
-        self.fc_out = nn.Linear(nf, 4) 
-
-    def forward(self, x):
-        x = torch.relu(self.conv1(x))
-        x = torch.relu(self.conv2(x))
-        x = x.view(x.size(0), -1)
-        x = torch.relu(self.fc1(x))
-        x = self.fc_out(x)
-        return torch.sigmoid(x)
 
 # ==========================================
 # Validation Functions
@@ -189,7 +86,8 @@ def validate_model(model, loader, is_cnn=False):
 def train(args):
     # WandB 初始化
     model_name = f"{args.model_arch.upper()}" if args.model_arch == 'mlp' else f"CNN-{args.model_arch}"
-    wandb_name = f"{model_name}-{args.use_loss}-frac{args.data_fraction}"
+    num_samples_str = f"{args.num_samples}" if args.num_samples else "16000"
+    wandb_name = f"{model_name}-{args.use_loss}-n{num_samples_str}"
     if args.model_arch != 'mlp':
         wandb_name += f"-nk{args.nk}_np{args.np}_nf{args.nf}"
     
@@ -198,39 +96,19 @@ def train(args):
     print(f"🚀 Training {model_name} with {args.use_loss} Loss")
     if args.model_arch != 'mlp':
         print(f"   Architecture: nk={args.nk}, np={args.np}, nf={args.nf}")
-    print(f"   Data Fraction: {args.data_fraction*100}%")
+    print(f"   Sample Size: {num_samples_str} (train+val)")
     print(f"   Learning Rate: {args.lr}")
     
-    # 1. Data Setup
-    train_set = TuringDataset(config.TRAIN_PATH)
-    val_set = TuringDataset(config.VAL_PATH)
-    
-    dataset = train_set
+    # 1. Data Setup - 載入 train_data.npz (16000 pool)，動態取樣並分割 3:1
+    dataset = TuringDataset(
+        npz_path=config.TRAIN_PATH,
+        num_samples=args.num_samples,
+        val_split=0.25,
+        seed=42
+    )
     dataset.scaler.to_device(config.DEVICE)
     
-    # Data Ablation
-    if args.data_fraction < 1.0:
-        total_train = len(train_set)
-        used_size = int(total_train * args.data_fraction)
-        unused_size = total_train - used_size
-        
-        train_set, _ = random_split(
-            train_set, [used_size, unused_size], 
-            generator=torch.Generator().manual_seed(42)
-        )
-        
-        total_val = len(val_set)
-        used_val_size = int(total_val * args.data_fraction)
-        unused_val_size = total_val - used_val_size
-
-        val_set, _ = random_split(
-            val_set, [used_val_size, unused_val_size],
-            generator=torch.Generator().manual_seed(42)
-        )
-
-        print(f"📉 Data Ablation ({args.data_fraction:.1%}):")
-        print(f"   Train: {total_train} -> {len(train_set)}")
-        print(f"   Val  : {total_val} -> {len(val_set)}")
+    train_set, val_set = dataset.get_train_val_datasets()
     
     train_loader = DataLoader(train_set, batch_size=config.BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(val_set, batch_size=config.BATCH_SIZE, shuffle=False)
@@ -297,7 +175,8 @@ def train(args):
     base_filename = f"PaperPINN_{args.model_arch.upper()}_{args.use_loss}"
     if args.model_arch != 'mlp':
         base_filename += f"_nk{args.nk}"
-    base_filename += f"_frac{args.data_fraction}_{current_num}"
+    num_samples_str = f"{args.num_samples}" if args.num_samples else "16000"
+    base_filename += f"_n{num_samples_str}_{current_num}"
     
     best_model_path = os.path.join(ckpt_dir, f"{base_filename}_best.pth")
     final_model_path = os.path.join(ckpt_dir, f"{base_filename}_last.pth")
@@ -471,8 +350,8 @@ def main():
                         help='Use gradual introduction for physics loss')
     
     # Data parameters
-    parser.add_argument('--data-fraction', type=float, default=0.1,
-                        help='Fraction of training data to use (e.g., 0.05 for 5%%)')
+    parser.add_argument('--num-samples', type=int, default=None,
+                        help='Total number of samples to use for train+val (None = use all 16000)')
     
     # Optimizer parameters
     parser.add_argument('--lr', type=float, default=None,
