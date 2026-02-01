@@ -122,7 +122,11 @@ def simulate_gm_mps(id, a, b, c, delta, u_star, v_star,
     D_v_inv = 1.0 / (1.0 - dt * Dv * L_eigenvalues)
 
     # --- 時間步進迴圈 (MPS GPU) ---
-    for t in range(T_steps):
+    current_t = 0
+    max_steps_dynamic = T_steps
+    has_extended = False
+
+    while current_t < max_steps_dynamic:
         # Explicit Reaction
         v_safe = torch.where(v > 1e-6, v, torch.tensor(1e-6, device=device))
         denominator = v_safe * (1 + c * u**2)
@@ -145,19 +149,38 @@ def simulate_gm_mps(id, a, b, c, delta, u_star, v_star,
         u_next = torch.real(torch.fft.ifft2(U_hat_k_plus_1))
         v_next = torch.real(torch.fft.ifft2(V_hat_k_plus_1))
 
+        current_t += 1
+
         # 檢查收斂
-        if (t + 1) % CHECK_INTERVAL == 0:
+        if current_t % CHECK_INTERVAL == 0:
             abs_diff = float(torch.max(torch.abs(u_next - u)).item())
             
             # 只有在最小演化步數之後，且變化夠小，才視為收斂
-            if (t + 1) >= MIN_EVOLUTION_STEPS and abs_diff < PRACTICAL_TOLERANCE:
-                return u_next.cpu().numpy(), v_next.cpu().numpy(), t + 1
+            if current_t >= MIN_EVOLUTION_STEPS and abs_diff < PRACTICAL_TOLERANCE:
+                return u_next.cpu().numpy(), v_next.cpu().numpy(), current_t
         
+            # [新增] 如果到達預定的 max_steps，但還沒形成斑紋，且還沒延長過 -> 延長一倍
+            if current_t >= max_steps_dynamic and not has_extended:
+                # 檢查斑紋強度 (從 CPU 檢查)
+                # 注意：這裡會造成一些 synchronization overhead，但只在 loop 尾端發生一次
+                u_cpu = u_next.cpu().numpy()
+                u_std = np.std(u_cpu)
+                u_range = np.max(u_cpu) - np.min(u_cpu)
+                
+                # 閾值判斷 (使用與 run_one_row 一致的標準)
+                MIN_RANGE_CHK = 0.01
+                if u_std < MIN_PATTERN_STD or u_range < MIN_RANGE_CHK:
+                    # 決定延長
+                    # print(f"  --> ID {id} extending steps from {max_steps_dynamic} to {max_steps_dynamic*2} (std={u_std:.4f})")
+                    max_steps_dynamic = T_steps * 2
+                    has_extended = True
+                    # 繼續 while 迴圈 (因為 max_steps_dynamic 變大了，條件 current_t < max_steps_dynamic 成立)
+
         u = u_next
         v = v_next
 
     # 達到最大步數，回傳
-    return u.cpu().numpy(), v.cpu().numpy(), T_steps
+    return u.cpu().numpy(), v.cpu().numpy(), current_t
 
 
 # =============== Worker Function ===============
@@ -210,48 +233,14 @@ def run_one_row(row_dict):
 
 # =============== Main ===============
 
-def main():
-    start_time = time.time()
-    
-    if not os.path.exists(PARAM_CSV):
-        print(f"❌ 找不到 {PARAM_CSV}")
+def save_results_to_file(results, filename_base, batch_idx, s_idx, e_idx):
+    if not results:
         return
-
-    df = pd.read_csv(PARAM_CSV)
     
-    # --- 範圍控制 ---
-    s_idx = max(0, RANGE_START)
-    e_idx = min(len(df), RANGE_END) if RANGE_END is not None else len(df)
-    df_to_run = df.iloc[s_idx:e_idx]
-    
-    output_filename = f"{OUTPUT_FILENAME_BASE}_{s_idx}_{e_idx}.npz"
-    print(f"🎯 執行範圍: {s_idx} ~ {e_idx} (共 {len(df_to_run)} 筆)")
-    print(f"🚀 [MPS 模式] 啟動 {MPS_WORKERS} 個 Worker (PyTorch MPS)...")
-    print(f"💾 輸出檔名: {output_filename}")
-
-    rows = [row.to_dict() for _, row in df_to_run.iterrows()]
-
-    results = []
-    
-    if MPS_WORKERS == 1:
-        # 單進程模式（推薦給 MPS）
-        for row in tqdm(rows, unit="sim"):
-            res = run_one_row(row)
-            if res is not None:
-                results.append(res)
-    else:
-        # 多進程模式
-        with Pool(processes=MPS_WORKERS) as pool:
-            iterator = pool.imap(run_one_row, rows, chunksize=1)
-            for res in tqdm(iterator, total=len(rows), unit="sim"):
-                if res is not None:
-                    results.append(res)
-
-    print(f"\n✅ 成功樣本: {len(results)}")
-    if not results: return
-
-    # 打包儲存
     count = len(results)
+    # 決定輸出檔名
+    output_filename = f"{filename_base}_batch{batch_idx}_{s_idx}_{e_idx}.npz"
+    
     U_all = np.zeros((count, N_GRID, N_GRID), dtype=np.float32)
     V_all = np.zeros((count, N_GRID, N_GRID), dtype=np.float32)
     ids = np.zeros(count, dtype=np.int32)
@@ -293,22 +282,62 @@ def main():
         s_diffusion=S_DIFFUSION,
         noise_std=NOISE_STD,
     )
-    print(f"🎉 儲存完畢: {output_filename} ({time.time()-start_time:.2f}s)")
+    print(f"💾 已儲存批次 {batch_idx}: {output_filename} (含 {count} 筆)")
 
-    # 預覽前 4 張
-    if count > 0:
-        fig, axes = plt.subplots(1, 4, figsize=(16, 4))
-        indices = np.linspace(0, count-1, 4, dtype=int)
-        for i, idx in enumerate(indices):
-            if i >= 4: break
-            ax = axes[i] if count > 1 else axes
-            ax.imshow(U_all[idx], cmap='magma', origin='lower')
-            ax.set_title(f"ID {ids[idx]}")
-            ax.axis('off')
-        plt.tight_layout()
-        plt.savefig(f"{OUTPUT_FILENAME_BASE}_{s_idx}_{e_idx}_preview.png", dpi=150)
-        print(f"📸 預覽圖已儲存: {OUTPUT_FILENAME_BASE}_{s_idx}_{e_idx}_preview.png")
-        plt.show()
+
+def main():
+    start_time = time.time()
+    
+    if not os.path.exists(PARAM_CSV):
+        print(f"❌ 找不到 {PARAM_CSV}")
+        return
+
+    df = pd.read_csv(PARAM_CSV)
+    
+    # --- 範圍控制 ---
+    s_idx = max(0, RANGE_START)
+    e_idx = min(len(df), RANGE_END) if RANGE_END is not None else len(df)
+    df_to_run = df.iloc[s_idx:e_idx]
+    
+    print(f"🎯 執行範圍: {s_idx} ~ {e_idx} (共 {len(df_to_run)} 筆)")
+    print(f"🚀 [MPS 模式] 啟動 {MPS_WORKERS} 個 Worker (PyTorch MPS)...")
+    print(f"💾 輸出將以 1000 筆為單位儲存至: {OUTPUT_FILENAME_BASE}...")
+
+    rows = [row.to_dict() for _, row in df_to_run.iterrows()]
+
+    results_buffer = []
+    batch_counter = 0
+    SAVE_INTERVAL = 1000
+    
+    def flush_results():
+        nonlocal batch_counter
+        if results_buffer:
+            save_results_to_file(results_buffer, OUTPUT_FILENAME_BASE, batch_counter, s_idx, e_idx)
+            batch_counter += 1
+            results_buffer.clear()
+
+    if MPS_WORKERS == 1:
+        # 單進程模式（推薦給 MPS）
+        for row in tqdm(rows, unit="sim"):
+            res = run_one_row(row)
+            if res is not None:
+                results_buffer.append(res)
+                if len(results_buffer) >= SAVE_INTERVAL:
+                    flush_results()
+    else:
+        # 多進程模式
+        with Pool(processes=MPS_WORKERS) as pool:
+            iterator = pool.imap(run_one_row, rows, chunksize=1)
+            for res in tqdm(iterator, total=len(rows), unit="sim"):
+                if res is not None:
+                    results_buffer.append(res)
+                    if len(results_buffer) >= SAVE_INTERVAL:
+                        flush_results()
+    
+    # 儲存最後剩餘的
+    flush_results()
+    
+    print(f"\n✅ 全部完成。總耗時: {time.time() - start_time:.2f}s")
 
 if __name__ == "__main__":
     main()
