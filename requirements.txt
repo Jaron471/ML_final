@@ -3,5 +3,7 @@ pandas
 tqdm
 wandb
 gdown
-# Install torch per https://pytorch.org/get-started/locally/
-torch
+# Install torch with CUDA support per https://pytorch.org/get-started/locally/
+torch --index-url https://download.pytorch.org/whl/cu121
+torchvision --index-url https://download.pytorch.org/whl/cu121
+torchaudio --index-url https://download.pytorch.org/whl/cu121
