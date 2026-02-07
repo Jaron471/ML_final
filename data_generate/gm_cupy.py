@@ -9,18 +9,57 @@
 
 import os
 import time
+import sys
+import glob
 import numpy as np
 import pandas as pd
 from scipy.optimize import fsolve
 from multiprocessing import Pool, set_start_method
 import matplotlib.pyplot as plt
 
+# ==========================================
+# 自動修正：加入 NVIDIA 套件 DLL 路徑 (Windows)
+# 解決 cupy-cuda12x 找不到 nvrtc64_120_0.dll 的問題
+# ==========================================
+if os.name == 'nt':
+    try:
+        # 搜尋 site-packages 中的 nvidia 資料夾
+        site_packages = [p for p in sys.path if 'site-packages' in p]
+        for sp in site_packages:
+            nvidia_path = os.path.join(sp, 'nvidia')
+            if os.path.isdir(nvidia_path):
+                # 遞歸尋找 bin 目錄
+                for root, dirs, files in os.walk(nvidia_path):
+                    if 'bin' in dirs:
+                        bin_path = os.path.join(root, 'bin')
+                        # 加入 DLL 搜尋路徑 (Python 3.8+)
+                        if hasattr(os, 'add_dll_directory'):
+                            try:
+                                os.add_dll_directory(bin_path)
+                            except Exception:
+                                pass
+                        # 同步加入環境變數 PATH (供子進程或其他工具使用)
+                        if bin_path not in os.environ['PATH']:
+                            os.environ['PATH'] = bin_path + os.pathsep + os.environ['PATH']
+    except Exception as e:
+        print(f"⚠️ Warning: Auto-setup of NVIDIA paths failed: {e}")
+
 # 強制引入 CuPy，如果沒裝會直接報錯
 try:
    import cupy as cp
+   # 測試一下 NVRTC 是否可用
+   cp.cuda.Device(0).use()
+   try:
+       # 觸發一次編譯確保 DLL 載入成功
+       cp.ElementwiseKernel('T x', 'T y', 'y = x', 'test_kernel')(cp.array([1.]))
+   except Exception as e:
+       print(f"⚠️ CuPy 載入成功但 NVRTC 可能失敗: {e}")
+       raise e
+
    print(f"✅ 成功載入 CuPy (Device: {cp.cuda.Device(0).compute_capability})")
-except ImportError:
-   raise ImportError("❌ 錯誤：此腳本需要安裝 CuPy (pip install cupy-cuda12x)。")
+except ImportError as e:
+    print(f"❌ CuPy Import Error: {e}")
+    raise ImportError("❌ 錯誤：此腳本需要安裝 CuPy (pip install cupy-cuda12x) 且需正確配置 CUDA 環境。")
 
 # 嘗試引入 tqdm
 try:
@@ -30,7 +69,7 @@ except ImportError:
 
 # =============== 全局模擬參數設定 ===============
 
-# 空間 / 時間離散
+# 模擬參數
 N_GRID = 128           # GPU 可以輕鬆跑 128x128 或更大
 DT = 0.2
 DX = 1.0
@@ -50,21 +89,19 @@ SEED      = 41
 PRACTICAL_TOLERANCE = 1e-6
 MAX_REL_CHANGE      = 1e-6
 CHECK_INTERVAL      = 200
-MIN_EVOLUTION_STEPS = 2000  # 最小演化步數，確保 Turing 不穩定性有時間發展
-MIN_PATTERN_STD     = 0.02  # 最小空間標準差，確保形成了斑紋
 
 # 檔案路徑
-PARAM_CSV   = "qualified_turing_params_20000.csv"
+PARAM_CSV   = "qualified_turing_params_20500.csv"
 OUTPUT_FILENAME_BASE = "turing_patterns_dataset_cupy"
 
 # =============== 範圍設定 (手動調整這裡) ===============
 # 設定要執行的 CSV 行數範圍
-RANGE_START = 18000
-RANGE_END   = None   # 設為 None 代表跑到最後
+RANGE_START = 20000
+RANGE_END   = 20500   # 設為 None 代表跑到最後
 
 # 設定 GPU 平行工人的數量 (建議 1~4)
 # ⚠️ 注意：每個 Worker 都會佔用約 500MB 顯存。如果你的顯存小於 8GB，建議設為 1 或 2。
-GPU_WORKERS = 8
+GPU_WORKERS = 1
 
 
 # =============== 數值方法 (純 CuPy) ===============
@@ -118,11 +155,7 @@ def simulate_gm_cupy(id, a, b, c, delta, u_star, v_star,
    D_v_inv = 1.0 / (1.0 - dt * Dv * L_eigenvalues)
 
    # --- 時間步進迴圈 (純 GPU) ---
-   current_t = 0
-   max_steps_dynamic = T_steps
-   has_extended = False
-
-   while current_t < max_steps_dynamic:
+   for t in range(T_steps):
        # Explicit Reaction
        # cp.where, cp.multiply 等操作都是在 GPU 上並行
        v_safe = cp.where(v > 1e-6, v, 1e-6)
@@ -146,37 +179,20 @@ def simulate_gm_cupy(id, a, b, c, delta, u_star, v_star,
        u_next = cp.real(cp.fft.ifft2(U_hat_k_plus_1))
        v_next = cp.real(cp.fft.ifft2(V_hat_k_plus_1))
 
-       current_t += 1
-
-       # Check 每個 interval 檢查
-       if current_t % CHECK_INTERVAL == 0:
-           # 計算時間變化
-           abs_diff = float(cp.max(cp.abs(u_next - u)))
-           
-           # 只有在最小演化步數之後才檢查收斂
-           if current_t >= MIN_EVOLUTION_STEPS:
-               if abs_diff < PRACTICAL_TOLERANCE:
-                # 收斂，回傳結果 (轉回 CPU NumPy array)
-                return cp.asnumpy(u_next), cp.asnumpy(v_next), current_t
-        
-           # [新增] 如果到達預定的 max_steps，但還沒形成斑紋，且還沒延長過 -> 延長一倍
-           if current_t >= max_steps_dynamic and not has_extended:
-               # 檢查斑紋強度
-               u_std = float(cp.std(u_next))
-               u_range = float(cp.max(u_next) - cp.min(u_next))
-                
-               # 閾值判斷 (使用與 run_one_row 一致的標準)
-               MIN_RANGE_CHK = 0.01
-               if u_std < MIN_PATTERN_STD or u_range < MIN_RANGE_CHK:
-                   # 決定延長
-                   max_steps_dynamic = T_steps * 2
-                   has_extended = True
+       # Check Convergence (每隔一段時間檢查)
+       if (t + 1) % CHECK_INTERVAL == 0:
+           # 這裡需要一個同步點，計算 max diff
+           abs_diff = float(cp.max(cp.abs(u_next - u))) # float() 會觸發從 GPU 拉回 CPU 的同步
+          
+           if abs_diff < PRACTICAL_TOLERANCE:
+               # 收斂，回傳結果 (轉回 CPU NumPy array)
+               return cp.asnumpy(u_next), cp.asnumpy(v_next), t + 1
       
        u = u_next
        v = v_next
 
    # 達到最大步數，回傳
-   return cp.asnumpy(u), cp.asnumpy(v), current_t
+   return cp.asnumpy(u), cp.asnumpy(v), T_steps
 
 
 # =============== Worker Function ===============
@@ -187,7 +203,6 @@ def run_one_row(row_dict):
    1. 接收參數
    2. 呼叫 GPU 模擬
    3. 將 GPU 結果轉回 CPU 並回傳
-   4. 驗證是否真正形成圖靈斑紋
    """
    try:
        pid = int(row_dict["id"])
@@ -197,20 +212,12 @@ def run_one_row(row_dict):
        u_star, v_star = calculate_gierer_meinhardt_steady_state(a_val, b_val, c_val)
        if u_star is None: return None
 
-       # GPU 驗證最終結果 ===
-       u_std = np.std(u_res)
-       
-       # 最後檢查：如果演化到最大步數仍未形成斑紋，拒絕
-       if u_std < MIN_PATTERN_STD:
-           print(f"⚠️  ID {pid}: 達到最大步數但未形成斑紋 (std={u_std:.6f}, steps={steps
-       # 閾值：標準差和範圍都要足夠大，才算形成了斑紋
-       MIN_STD = 0.01
-       MIN_RANGE = 0.01
-       
-       if u_std < MIN_STD or u_range < MIN_RANGE:
-           print(f"⚠️  ID {pid}: 未形成斑紋 (std={u_std:.6f}, range={u_range:.6f}) - 已拒絕")
-           return None
-       
+       # GPU 模擬
+       u_res, v_res, steps = simulate_gm_cupy(
+           id=pid, a=a_val, b=b_val, c=c_val, delta=d_val,
+           u_star=u_star, v_star=v_star
+       )
+
        # 這裡的 u_res, v_res 已經是 numpy array 了
        return {
            "id": pid, "a": a_val, "b": b_val, "c": c_val, "delta": d_val,
@@ -225,14 +232,45 @@ def run_one_row(row_dict):
 
 # =============== Main ===============
 
-def save_results_to_file(results, filename_base, batch_idx, s_idx, e_idx):
-   if not results:
+def main():
+   # Windows 下使用 multiprocessing 搭配 CUDA 建議使用 spawn (但 Pool 預設就是 spawn)
+   # set_start_method('spawn', force=True)
+  
+   start_time = time.time()
+  
+   if not os.path.exists(PARAM_CSV):
+       print(f"❌ 找不到 {PARAM_CSV}")
        return
+
+   df = pd.read_csv(PARAM_CSV)
   
+   # --- 範圍控制 ---
+   s_idx = max(0, RANGE_START)
+   e_idx = min(len(df), RANGE_END) if RANGE_END is not None else len(df)
+   df_to_run = df.iloc[s_idx:e_idx]
+  
+   output_filename = f"{OUTPUT_FILENAME_BASE}_{s_idx}_{e_idx}.npz"
+   print(f"🎯 執行範圍: {s_idx} ~ {e_idx} (共 {len(df_to_run)} 筆)")
+   print(f"🚀 [GPU 模式] 啟動 {GPU_WORKERS} 個 Worker (純 CuPy)...")
+   print(f"💾 輸出檔名: {output_filename}")
+
+   rows = [row.to_dict() for _, row in df_to_run.iterrows()]
+
+   results = []
+  
+   # 使用 Pool 進行並行處理
+   # 雖然是 GPU，但開 2 個 Process 可以掩蓋數據傳輸的時間
+   with Pool(processes=GPU_WORKERS) as pool:
+       iterator = pool.imap(run_one_row, rows, chunksize=1)
+       for res in tqdm(iterator, total=len(rows), unit="sim"):
+           if res is not None:
+               results.append(res)
+
+   print(f"\n✅ 成功樣本: {len(results)}")
+   if not results: return
+
+   # 打包儲存
    count = len(results)
-   # 決定輸出檔名
-   output_filename = f"{filename_base}_batch{batch_idx}_{s_idx}_{e_idx}.npz"
-  
    U_all = np.zeros((count, N_GRID, N_GRID), dtype=np.float32)
    V_all = np.zeros((count, N_GRID, N_GRID), dtype=np.float32)
    ids = np.zeros(count, dtype=np.int32)
@@ -274,57 +312,19 @@ def save_results_to_file(results, filename_base, batch_idx, s_idx, e_idx):
        s_diffusion=S_DIFFUSION,
        noise_std=NOISE_STD,
    )
-   print(f"💾 已儲存批次 {batch_idx}: {output_filename} (含 {count} 筆)")
+   print(f"🎉 儲存完畢: {output_filename} ({time.time()-start_time:.2f}s)")
 
-
-def main():
-   # Windows 下使用 multiprocessing 搭配 CUDA 建議使用 spawn (但 Pool 預設就是 spawn)
-   # set_start_method('spawn', force=True)
-  
-   start_time = time.time()
-  
-   if not os.path.exists(PARAM_CSV):
-       print(f"❌ 找不到 {PARAM_CSV}")
-       return
-
-   df = pd.read_csv(PARAM_CSV)
-  
-   # --- 範圍控制 ---
-   s_idx = max(0, RANGE_START)
-   e_idx = min(len(df), RANGE_END) if RANGE_END is not None else len(df)
-   df_to_run = df.iloc[s_idx:e_idx]
-  
-   print(f"🎯 執行範圍: {s_idx} ~ {e_idx} (共 {len(df_to_run)} 筆)")
-   print(f"🚀 [GPU 模式] 啟動 {GPU_WORKERS} 個 Worker (純 CuPy)...")
-   print(f"💾 輸出將以 1000 筆為單位儲存至: {OUTPUT_FILENAME_BASE}...")
-
-   rows = [row.to_dict() for _, row in df_to_run.iterrows()]
-
-   results_buffer = []
-   batch_counter = 0
-   SAVE_INTERVAL = 1000
-    
-   def flush_results():
-       nonlocal batch_counter
-       if results_buffer:
-           save_results_to_file(results_buffer, OUTPUT_FILENAME_BASE, batch_counter, s_idx, e_idx)
-           batch_counter += 1
-           results_buffer.clear()
-  
-   # 使用 Pool 進行並行處理
-   # 雖然是 GPU，但開 2 個 Process 可以掩蓋數據傳輸的時間
-   with Pool(processes=GPU_WORKERS) as pool:
-       iterator = pool.imap(run_one_row, rows, chunksize=1)
-       for res in tqdm(iterator, total=len(rows), unit="sim"):
-           if res is not None:
-               results_buffer.append(res)
-               if len(results_buffer) >= SAVE_INTERVAL:
-                   flush_results()
-
-   # 儲存最後剩餘的
-   flush_results()
-   
-   print(f"\n✅ 全部完成。總耗時: {time.time() - start_time:.2f}s")
+   # 預覽前 4 張
+   if count > 0:
+       import matplotlib.pyplot as plt
+       fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+       indices = np.linspace(0, count-1, 4, dtype=int)
+       for i, idx in enumerate(indices):
+           if i >= 4: break
+           ax = axes[i] if count > 1 else axes
+           ax.imshow(U_all[idx], cmap='magma', origin='lower')
+           ax.set_title(f"ID {ids[idx]}")
+           ax.axis('off')
        plt.show()
 
 if __name__ == "__main__":

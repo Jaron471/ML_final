@@ -11,7 +11,7 @@ np.random.seed(SEED)
 PARAM_RANGES = {
     'a': [0.01, 0.7],
     'b': [0.4, 2.0],
-    'c': [0.02, 7.0],
+    'c': [0.03, 7.0],
     'delta': [20.0, 200.0]
 }
 
@@ -138,7 +138,7 @@ def generate_qualified_turing_params(target_count=20000, output_filename='qualif
 if __name__ == '__main__':
     # 為了演示，我們使用一個較小的數量 (例如 1000 筆)
     # 如果您想生成 20,000 筆，請將 target_count 設置為 20000
-    target_count = 20000  # 修改此數值以改變目標數量
+    target_count = 20500  # 修改此數值以改變目標數量
     output_filename = f'qualified_turing_params_{target_count}.csv'
     generated_df = generate_qualified_turing_params(
         target_count=target_count,

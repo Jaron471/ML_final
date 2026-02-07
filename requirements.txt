@@ -3,7 +3,15 @@ pandas
 tqdm
 wandb
 gdown
+scikit-learn
+scipy
+matplotlib
 # Install torch with CUDA support per https://pytorch.org/get-started/locally/
-torch --index-url https://download.pytorch.org/whl/cu121
-torchvision --index-url https://download.pytorch.org/whl/cu121
-torchaudio --index-url https://download.pytorch.org/whl/cu121
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.6.0+cu124
+torchvision==0.21.0+cu124
+torchaudio==2.6.0+cu124
+nvidia-cuda-nvrtc-cu12
+nvidia-cuda-runtime-cu12
+cupy-cuda12x
+nvidia-cufft-cu12

@@ -1,10 +1,11 @@
 import numpy as np
 import os
 
-def split_dataset_fixed(source_path, output_dir=".", seed=42):
+def split_dataset_fixed(source_path, output_dir=".", seed=42, n_train=None, n_test=None, split_ratio=0.8):
     """
-    將 .npz 資料集分割為固定的 16000 train+val 和 4000 test
-    不使用 data_fraction（訓練時動態取樣）
+    將 .npz 資料集分割為 train 和 test
+    如果指定 n_train/n_test 則使用固定數量
+    否則使用 split_ratio (預設 0.8)
     """
     if not os.path.exists(source_path):
         print(f"❌ 找不到檔案: {source_path}")
@@ -16,10 +17,17 @@ def split_dataset_fixed(source_path, output_dir=".", seed=42):
     
     # 1. 找出主要的資料長度
     total_samples = 0
-    for k in keys:
-        arr = data[k]
-        if arr.ndim > 0 and arr.shape[0] > total_samples:
-            total_samples = arr.shape[0]
+    # 先找 'u' 或 'v'
+    if 'u' in keys:
+        total_samples = data['u'].shape[0]
+    elif 'ids' in keys:
+        total_samples = data['ids'].shape[0]
+    else:
+        # Fallback
+        for k in keys:
+            arr = data[k]
+            if arr.ndim > 0 and arr.shape[0] > total_samples:
+                total_samples = arr.shape[0]
 
     if total_samples == 0:
         print("❌ 錯誤：無法偵測到有效的樣本數據")
@@ -28,19 +36,26 @@ def split_dataset_fixed(source_path, output_dir=".", seed=42):
     print(f"📊 總樣本數基準: {total_samples}")
 
     # ==========================================
-    # 🔢 固定切分: 16000 (train+val pool) + 4000 (test)
+    # 決定切分數量
     # ==========================================
-    n_trainval = 16000
-    n_test = 4000
-
+    if n_train is None and n_test is None:
+        # 使用比例
+        n_trainval = int(total_samples * split_ratio)
+        n_test = total_samples - n_trainval
+    else:
+        # 使用固定數量 (預設為原始設定)
+        if n_train is None: n_train = 16000
+        if n_test is None: n_test = 4000
+        n_trainval = n_train
+    
     # 檢查數量
     if n_trainval + n_test > total_samples:
-        print(f"❌ 錯誤: 指定數量 ({n_trainval}+{n_test}) 超過總數 ({total_samples})")
-        return
+        print(f"⚠️ 指定數量 ({n_trainval}+{n_test}) 超過總數 ({total_samples})")
+        print(f"   自動調整為比例分配 ({split_ratio*100:.0f}%/{100-split_ratio*100:.0f}%)")
+        n_trainval = int(total_samples * split_ratio)
+        n_test = total_samples - n_trainval
 
-    print(f"✂️  分割計畫: TrainVal Pool={n_trainval}, Test={n_test}")
-    if (n_trainval + n_test) < total_samples:
-        print(f"⚠️  注意: 有 {total_samples - (n_trainval + n_test)} 筆資料將被丟棄不使用。")
+    print(f"✂️  分割計畫: TrainVal={n_trainval}, Test={n_test}")
     
     # 隨機打亂索引（固定 seed）
     np.random.seed(seed)
@@ -50,11 +65,7 @@ def split_dataset_fixed(source_path, output_dir=".", seed=42):
     idx_test = indices[n_trainval : n_trainval + n_test]
     
     # 準備儲存的字典
-    data_train = {}
-    data_val = {}
-    data_test = {}
-    
-    # 2. 智慧遍歷並val = {}
+    data_trainval = {}
     data_test = {}
     
     # 2. 智慧遍歷並切分
@@ -73,12 +84,16 @@ def split_dataset_fixed(source_path, output_dir=".", seed=42):
     
     # 存檔 (train_data.npz 為 16000 的 pool，訓練時動態取樣)
     print("💾 正在儲存分割後的檔案...")
-    np.savez_compressed(os.path.join(output_dir, "train_data.npz"), **data_trainval)
-    np.savez_compressed(os.path.join(output_dir, "test_data.npz"), **data_test)
+    # 預設儲存為 generic name，或根據需求修改
+    out_train = os.path.join(output_dir, "turing_patterns_dataset_clean_train.npz")
+    out_test = os.path.join(output_dir, "turing_patterns_dataset_clean_test.npz")
+    
+    np.savez_compressed(out_train, **data_trainval)
+    np.savez_compressed(out_test, **data_test)
     
     print("✅ 完成！")
-    print(f"   📦 train_data.npz: {n_trainval} 樣本 (訓練時根據 data_fraction 取樣)")
-    print(f"   📦 test_data.npz: {n_test} 樣本")
+    print(f"   📦 {os.path.basename(out_train)}: {n_trainval} 樣本")
+    print(f"   📦 {os.path.basename(out_test)}: {n_test} 樣本")
 
 if __name__ == "__main__":
     # 對應 gm_mps.py 的輸出

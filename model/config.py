@@ -9,9 +9,11 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.ba
 # 指向你合併後的大數據集 (確保這檔案在根目錄)
 NPZ_PATH = "turing_patterns_dataset_merged.npz"
 
-TRAIN_PATH = "train_data.npz"
+# TRAIN_PATH = "train_data.npz"
+# 使用驗證過的數據集（已排除沒有圖案的樣本，並去除了9個極端異常值）
+TRAIN_PATH = "turing_patterns_dataset_clean_train.npz"
 VAL_PATH =   "val_data.npz"
-TEST_PATH =  "test_data.npz"
+TEST_PATH =  "turing_patterns_dataset_clean_test.npz"
 
 # 儲存路徑 (會由 train.py 動態修改，這裡只是預設值)
 MODEL_SAVE_PATH = "checkpoint/model.pth"
@@ -56,5 +58,5 @@ LOSS_TYPE = "L1"           # "L1" or "MSE"
 # ==========================================
 # 6. WandB 設定
 # ==========================================
-WANDB_PROJECT = "Turing-Pattern-Unified"
-WANDB_RUN_NAME = "Unified_Run"
+WANDB_PROJECT = "Turing-Pattern-new"
+WANDB_RUN_NAME = "CNN_Run"
