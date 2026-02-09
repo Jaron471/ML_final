@@ -11,29 +11,31 @@ from sklearn.metrics import r2_score
 
 from model import config
 from model.dataset import TuringDataset
-from model.model import PaperFlexibleCNN
+from model.model import PaperFlexibleCNN, MLPNet
 
 # Configurations
-SAMPLES = [2000, 4000, 8000, 16000]
+SAMPLES = [1000]
 LOSS_CONFIGS = [
     # (use_loss, lambda_phy)
-    ('pure', 0.0),      # Pure Supervised
-    ('physical', 0.1),  # Physical with lambda=0.1
-    ('physical', 0.01)  # Physical with lambda=0.01
+    ('pure', 0.0),          # Pure Supervised
+    ('physical', 0.1),      # Physical with lambda=0.1
+    ('physical', 0.01),    # Physical with lambda=0.01
+    ('physical', 0.001),   # Physical with lambda=0.001
+    ('physical', 0.0001),  # Physical with lambda=0.0001
+    ('physical', 0.00001)  # Physical with lambda=0.00001
 ]
 
 # Architectures to test
 # (layers, sampling)
 ARCHITECTURES = [
+    #(0, 'mlp'),       # MLP
     (1, 'none'),      # Like CNN1
     (2, 'none'),      # Like CNN2
     (2, 'maxpool'),   # Like CNN2Pool
-    (2, 'avgpool'),   # New AvgPool
-    (2, 'stride'),    # Like CNN2Stride
+    (2, 'dilated'),   # Like CNN2 but with dilated conv (New)
     (4, 'none'),      # Deeper without sampling
     (4, 'maxpool'),   # Deeper with MaxPool
-    (4, 'avgpool'),   # Deeper with AvgPool
-    (4, 'stride')     # Deeper with Stride
+    (4, 'dilated'),   # Deeper with Dilated Conv (New)
 ]
 
 def get_latest_checkpoint(ckpt_dir, pattern_regex):
@@ -66,11 +68,14 @@ def evaluate_model(config_dict, model_path, dataset_loader):
     print(f"📊 Evaluating: {os.path.basename(model_path)}")
     
     # 1. Build Model
-    model = PaperFlexibleCNN(
-        nk=5, np_size=5, nf=5,
-        layers=config_dict['layers'],
-        sampling=config_dict['sampling']
-    ).to(config.DEVICE)
+    if config_dict['layers'] == 0:
+        model = MLPNet().to(config.DEVICE)
+    else:
+        model = PaperFlexibleCNN(
+            nk=5, np_size=5, nf=5,
+            layers=config_dict['layers'],
+            sampling=config_dict['sampling']
+        ).to(config.DEVICE)
     
     # 2. Load Weights
     try:
@@ -159,20 +164,30 @@ def run_training():
             for use_loss, lam in LOSS_CONFIGS:
                 current_run += 1
                 
+                arch_name = "MLP" if layers == 0 else f"Flexible CNN (L={layers}, {sampling})"
                 print(f"\n[{current_run}/{total_runs}] Training Config:")
-                print(f"  Architecture: Flexible CNN (L={layers}, {sampling})")
+                print(f"  Architecture: {arch_name}")
                 print(f"  Samples:      {nsamp}")
                 print(f"  Loss:         {use_loss} (lambda={lam})")
                 
-                cmd = [
-                    sys.executable, "train_unified.py",
-                    "--model-arch", "flexible_cnn",
-                    "--conv-layers", str(layers),
-                    "--sampling", sampling,
-                    "--num-samples", str(nsamp),
-                    "--use-loss", use_loss,
-                    "--lambda-phy", str(lam)
-                ]
+                if layers == 0:
+                    cmd = [
+                        sys.executable, "train_unified.py",
+                        "--model-arch", "mlp",
+                        "--num-samples", str(nsamp),
+                        "--use-loss", use_loss,
+                        "--lambda-phy", str(lam)
+                    ]
+                else:
+                    cmd = [
+                        sys.executable, "train_unified.py",
+                        "--model-arch", "flexible_cnn",
+                        "--conv-layers", str(layers),
+                        "--sampling", sampling,
+                        "--num-samples", str(nsamp),
+                        "--use-loss", use_loss,
+                        "--lambda-phy", str(lam)
+                    ]
                 
                 # Run the command
                 start_time = time.time()
@@ -196,7 +211,10 @@ def run_training():
                     loss_tag = f"{use_loss}_lam{lam}"
                 
                 # Note: Regex requires escaping special chars if necessary, but here strings are alphanumeric mostly
-                pattern = f"PaperPINN_CNN_Flex_L{layers}_{sampling}_{loss_tag}_n{nsamp}_(?P<num>\\d+)_.*\\.pth"
+                if layers == 0:
+                     pattern = f"PaperPINN_MLP_{loss_tag}_n{nsamp}_(?P<num>\\d+)_.*\\.pth"
+                else:
+                     pattern = f"PaperPINN_CNN_Flex_L{layers}_{sampling}_{loss_tag}_n{nsamp}_(?P<num>\\d+)_.*\\.pth"
                 
                 ckpt_dir = "paper_checkpoints"
                 latest_model = get_latest_checkpoint(ckpt_dir, pattern)

@@ -131,7 +131,9 @@ class PaperFlexibleCNN(nn.Module):
         
         for i in range(layers):
             stride = 2 if sampling == 'stride' else 1
-            conv = nn.Conv2d(in_channels=in_c, out_channels=nk, kernel_size=np_size, stride=stride, padding=0)
+            dilation = 2**i if sampling == 'dilated' else 1
+            
+            conv = nn.Conv2d(in_channels=in_c, out_channels=nk, kernel_size=np_size, stride=stride, padding=0, dilation=dilation)
             self.conv_layers.append(conv)
             
             if sampling == 'stride':
@@ -142,6 +144,7 @@ class PaperFlexibleCNN(nn.Module):
             elif sampling == 'avgpool':
                 self.pools.append(nn.AvgPool2d(kernel_size=2, stride=2))
                 current_dim = current_dim // 2
+            # dilated: current_dim stays same
             
             in_c = nk # Next layer input channels = nk
             
@@ -150,10 +153,14 @@ class PaperFlexibleCNN(nn.Module):
         self.fc_out = nn.Linear(nf, 4)
 
     def forward(self, x):
-        pad = self.np_size // 2
+        pad_base = self.np_size // 2
         
         for i in range(self.layers):
             # Circular padding before conv
+            # Adjust padding for dilation
+            dilation = self.conv_layers[i].dilation[0]
+            pad = pad_base * dilation
+            
             x = F.pad(x, (pad, pad, pad, pad), mode='circular')
             x = torch.relu(self.conv_layers[i](x))
             

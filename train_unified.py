@@ -227,7 +227,7 @@ if __name__ == "__main__":
                         choices=['mlp', 'cnn1', 'cnn2', 'cnn2pool', 'cnn2stride', 'flexible_cnn'])
     
     parser.add_argument('--conv-layers', type=int, default=4, help='Number of layers for Flexible CNN')
-    parser.add_argument('--sampling', type=str, default='none', choices=['none', 'maxpool', 'avgpool', 'stride'],
+    parser.add_argument('--sampling', type=str, default='none', choices=['none', 'maxpool', 'avgpool', 'stride', 'dilated'],
                         help='Sampling method for Flexible CNN')
     
     # Old CNN Params
