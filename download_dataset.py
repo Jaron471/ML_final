@@ -3,7 +3,7 @@ import os
 import shutil
 
 def download_dataset():
-    url = "https://drive.google.com/drive/folders/1kFGnLe4YJ6ddM5YCSfyXyZ86eCBLJb96?usp=sharing"
+    url = "https://drive.google.com/drive/folders/18Vc_uFunWvOcYppVVmc9QZz21nX6Zop3?usp=sharing"
     # Use a temporary folder to download the content first
     temp_output = "temp_dataset_download"
 

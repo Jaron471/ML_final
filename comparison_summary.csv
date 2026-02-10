@@ -1,0 +1,241 @@
+Architecture,BaseArch,Loss,Lambda,Samples,NRMSE,R2,File
+"FlexCNN (L=1, none)","FlexCNN (L=1, none)",pure,N/A,1000,0.22549917,-0.032488077878952026,PaperPINN_CNN_Flex_L1_none_pure_n1000_1_best.pth
+"FlexCNN (L=1, none) (λ=0.0001)","FlexCNN (L=1, none)",physical,0.0001,1000,0.2239005,-0.020684316754341125,PaperPINN_CNN_Flex_L1_none_physical_lam0.0001_n1000_1_best.pth
+"FlexCNN (L=1, none) (λ=0.001)","FlexCNN (L=1, none)",physical,0.001,1000,0.22545396,-0.03898046910762787,PaperPINN_CNN_Flex_L1_none_physical_lam0.001_n1000_1_best.pth
+"FlexCNN (L=1, none) (λ=0.01)","FlexCNN (L=1, none)",physical,0.01,1000,0.22516002,-0.024252265691757202,PaperPINN_CNN_Flex_L1_none_physical_lam0.01_n1000_1_best.pth
+"FlexCNN (L=1, none) (λ=0.1)","FlexCNN (L=1, none)",physical,0.1,1000,0.2053302,0.24618768692016602,PaperPINN_CNN_Flex_L1_none_physical_lam0.1_n1000_1_best.pth
+"FlexCNN (L=1, none) (λ=1e-05)","FlexCNN (L=1, none)",physical,1e-05,1000,0.2254879,-0.032653748989105225,PaperPINN_CNN_Flex_L1_none_physical_lam1e-05_n1000_1_best.pth
+"FlexCNN (L=2, dilated)","FlexCNN (L=2, dilated)",pure,N/A,1000,0.1448991,0.568537712097168,PaperPINN_CNN_Flex_L2_dilated_pure_n1000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=0.0001)","FlexCNN (L=2, dilated)",physical,0.0001,1000,0.15294811,0.5346133708953857,PaperPINN_CNN_Flex_L2_dilated_physical_lam0.0001_n1000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=0.001)","FlexCNN (L=2, dilated)",physical,0.001,1000,0.18419132,0.29225456714630127,PaperPINN_CNN_Flex_L2_dilated_physical_lam0.001_n1000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=0.01)","FlexCNN (L=2, dilated)",physical,0.01,1000,0.18226562,0.29158103466033936,PaperPINN_CNN_Flex_L2_dilated_physical_lam0.01_n1000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=0.1)","FlexCNN (L=2, dilated)",physical,0.1,1000,0.17523073,0.3665813207626343,PaperPINN_CNN_Flex_L2_dilated_physical_lam0.1_n1000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=1e-05)","FlexCNN (L=2, dilated)",physical,1e-05,1000,0.14989626,0.5455120205879211,PaperPINN_CNN_Flex_L2_dilated_physical_lam1e-05_n1000_1_best.pth
+"FlexCNN (L=2, maxpool)","FlexCNN (L=2, maxpool)",pure,N/A,1000,0.1634818,0.4644814431667328,PaperPINN_CNN_Flex_L2_maxpool_pure_n1000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=0.0001)","FlexCNN (L=2, maxpool)",physical,0.0001,1000,0.16328646,0.4662625193595886,PaperPINN_CNN_Flex_L2_maxpool_physical_lam0.0001_n1000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=0.001)","FlexCNN (L=2, maxpool)",physical,0.001,1000,0.16282828,0.47064995765686035,PaperPINN_CNN_Flex_L2_maxpool_physical_lam0.001_n1000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=0.01)","FlexCNN (L=2, maxpool)",physical,0.01,1000,0.1629511,0.46226194500923157,PaperPINN_CNN_Flex_L2_maxpool_physical_lam0.01_n1000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=0.1)","FlexCNN (L=2, maxpool)",physical,0.1,1000,0.12866876,0.6686717867851257,PaperPINN_CNN_Flex_L2_maxpool_physical_lam0.1_n1000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=1e-05)","FlexCNN (L=2, maxpool)",physical,1e-05,1000,0.16347428,0.4645775258541107,PaperPINN_CNN_Flex_L2_maxpool_physical_lam1e-05_n1000_1_best.pth
+"FlexCNN (L=2, none)","FlexCNN (L=2, none)",pure,N/A,1000,0.15565385,0.5230022668838501,PaperPINN_CNN_Flex_L2_none_pure_n1000_1_best.pth
+"FlexCNN (L=2, none) (λ=0.0001)","FlexCNN (L=2, none)",physical,0.0001,1000,0.15187243,0.540500283241272,PaperPINN_CNN_Flex_L2_none_physical_lam0.0001_n1000_1_best.pth
+"FlexCNN (L=2, none) (λ=0.001)","FlexCNN (L=2, none)",physical,0.001,1000,0.19163871,0.26421329379081726,PaperPINN_CNN_Flex_L2_none_physical_lam0.001_n1000_1_best.pth
+"FlexCNN (L=2, none) (λ=0.01)","FlexCNN (L=2, none)",physical,0.01,1000,0.1449358,0.5781460404396057,PaperPINN_CNN_Flex_L2_none_physical_lam0.01_n1000_1_best.pth
+"FlexCNN (L=2, none) (λ=0.1)","FlexCNN (L=2, none)",physical,0.1,1000,0.13502252,0.6266686916351318,PaperPINN_CNN_Flex_L2_none_physical_lam0.1_n1000_1_best.pth
+"FlexCNN (L=2, none) (λ=1e-05)","FlexCNN (L=2, none)",physical,1e-05,1000,0.15488923,0.5237257480621338,PaperPINN_CNN_Flex_L2_none_physical_lam1e-05_n1000_1_best.pth
+"FlexCNN (L=4, dilated)","FlexCNN (L=4, dilated)",pure,N/A,1000,0.13922112,0.6062802076339722,PaperPINN_CNN_Flex_L4_dilated_pure_n1000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=0.0001)","FlexCNN (L=4, dilated)",physical,0.0001,1000,0.13912137,0.615781307220459,PaperPINN_CNN_Flex_L4_dilated_physical_lam0.0001_n1000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=0.001)","FlexCNN (L=4, dilated)",physical,0.001,1000,0.14018725,0.5984018445014954,PaperPINN_CNN_Flex_L4_dilated_physical_lam0.001_n1000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=0.01)","FlexCNN (L=4, dilated)",physical,0.01,1000,0.12663482,0.6729574203491211,PaperPINN_CNN_Flex_L4_dilated_physical_lam0.01_n1000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=0.1)","FlexCNN (L=4, dilated)",physical,0.1,1000,0.1384705,0.6094657778739929,PaperPINN_CNN_Flex_L4_dilated_physical_lam0.1_n1000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=1e-05)","FlexCNN (L=4, dilated)",physical,1e-05,1000,0.14044395,0.5991865396499634,PaperPINN_CNN_Flex_L4_dilated_physical_lam1e-05_n1000_1_best.pth
+"FlexCNN (L=4, maxpool)","FlexCNN (L=4, maxpool)",pure,N/A,1000,0.16307251,0.3871612548828125,PaperPINN_CNN_Flex_L4_maxpool_pure_n1000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=0.0001)","FlexCNN (L=4, maxpool)",physical,0.0001,1000,0.1600346,0.4157649576663971,PaperPINN_CNN_Flex_L4_maxpool_physical_lam0.0001_n1000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=0.001)","FlexCNN (L=4, maxpool)",physical,0.001,1000,0.15317328,0.45918601751327515,PaperPINN_CNN_Flex_L4_maxpool_physical_lam0.001_n1000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=0.01)","FlexCNN (L=4, maxpool)",physical,0.01,1000,0.13400576,0.5662944912910461,PaperPINN_CNN_Flex_L4_maxpool_physical_lam0.01_n1000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=0.1)","FlexCNN (L=4, maxpool)",physical,0.1,1000,0.13079701,0.6356753706932068,PaperPINN_CNN_Flex_L4_maxpool_physical_lam0.1_n1000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=1e-05)","FlexCNN (L=4, maxpool)",physical,1e-05,1000,0.1610075,0.40748950839042664,PaperPINN_CNN_Flex_L4_maxpool_physical_lam1e-05_n1000_1_best.pth
+"FlexCNN (L=4, none)","FlexCNN (L=4, none)",pure,N/A,1000,0.16568384,0.4556899666786194,PaperPINN_CNN_Flex_L4_none_pure_n1000_1_best.pth
+"FlexCNN (L=4, none) (λ=0.0001)","FlexCNN (L=4, none)",physical,0.0001,1000,0.16494103,0.44833165407180786,PaperPINN_CNN_Flex_L4_none_physical_lam0.0001_n1000_1_best.pth
+"FlexCNN (L=4, none) (λ=0.001)","FlexCNN (L=4, none)",physical,0.001,1000,0.16375405,0.4550536870956421,PaperPINN_CNN_Flex_L4_none_physical_lam0.001_n1000_1_best.pth
+"FlexCNN (L=4, none) (λ=0.01)","FlexCNN (L=4, none)",physical,0.01,1000,0.15763083,0.4853057265281677,PaperPINN_CNN_Flex_L4_none_physical_lam0.01_n1000_1_best.pth
+"FlexCNN (L=4, none) (λ=0.1)","FlexCNN (L=4, none)",physical,0.1,1000,0.23161449,-0.11477594077587128,PaperPINN_CNN_Flex_L4_none_physical_lam0.1_n1000_1_best.pth
+"FlexCNN (L=4, none) (λ=1e-05)","FlexCNN (L=4, none)",physical,1e-05,1000,0.1610066,0.4700925946235657,PaperPINN_CNN_Flex_L4_none_physical_lam1e-05_n1000_1_best.pth
+MLP,MLP,pure,N/A,1000,0.24396683,-0.17978434264659882,PaperPINN_MLP_pure_n1000_1_best.pth
+MLP (λ=0.0001),MLP,physical,0.0001,1000,0.24440326,-0.18925119936466217,PaperPINN_MLP_physical_lam0.0001_n1000_1_best.pth
+MLP (λ=0.001),MLP,physical,0.001,1000,0.2461161,-0.19964034855365753,PaperPINN_MLP_physical_lam0.001_n1000_1_best.pth
+MLP (λ=0.01),MLP,physical,0.01,1000,0.24510993,-0.18918921053409576,PaperPINN_MLP_physical_lam0.01_n1000_1_best.pth
+MLP (λ=0.1),MLP,physical,0.1,1000,0.24405664,-0.18244530260562897,PaperPINN_MLP_physical_lam0.1_n1000_1_best.pth
+MLP (λ=1e-05),MLP,physical,1e-05,1000,0.24469654,-0.18832217156887054,PaperPINN_MLP_physical_lam1e-05_n1000_1_best.pth
+"FlexCNN (L=1, none)","FlexCNN (L=1, none)",pure,N/A,2000,0.21779579,0.04141564667224884,PaperPINN_CNN_Flex_L1_none_pure_n2000_1_best.pth
+"FlexCNN (L=1, none) (λ=0.0001)","FlexCNN (L=1, none)",physical,0.0001,2000,0.21777083,0.04166007041931152,PaperPINN_CNN_Flex_L1_none_physical_lam0.0001_n2000_1_best.pth
+"FlexCNN (L=1, none) (λ=0.001)","FlexCNN (L=1, none)",physical,0.001,2000,0.2174824,0.029229432344436646,PaperPINN_CNN_Flex_L1_none_physical_lam0.001_n2000_1_best.pth
+"FlexCNN (L=1, none) (λ=0.01)","FlexCNN (L=1, none)",physical,0.01,2000,0.21669823,0.03454408049583435,PaperPINN_CNN_Flex_L1_none_physical_lam0.01_n2000_1_best.pth
+"FlexCNN (L=1, none) (λ=0.1)","FlexCNN (L=1, none)",physical,0.1,2000,0.18679306,0.39803335070610046,PaperPINN_CNN_Flex_L1_none_physical_lam0.1_n2000_1_best.pth
+"FlexCNN (L=1, none) (λ=1e-05)","FlexCNN (L=1, none)",physical,1e-05,2000,0.21780056,0.04138457775115967,PaperPINN_CNN_Flex_L1_none_physical_lam1e-05_n2000_1_best.pth
+"FlexCNN (L=2, dilated)","FlexCNN (L=2, dilated)",pure,N/A,2000,0.17131226,0.35933199524879456,PaperPINN_CNN_Flex_L2_dilated_pure_n2000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=0.0001)","FlexCNN (L=2, dilated)",physical,0.0001,2000,0.17116912,0.34540867805480957,PaperPINN_CNN_Flex_L2_dilated_physical_lam0.0001_n2000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=0.001)","FlexCNN (L=2, dilated)",physical,0.001,2000,0.1718722,0.3632930815219879,PaperPINN_CNN_Flex_L2_dilated_physical_lam0.001_n2000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=0.01)","FlexCNN (L=2, dilated)",physical,0.01,2000,0.17422254,0.36637580394744873,PaperPINN_CNN_Flex_L2_dilated_physical_lam0.01_n2000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=0.1)","FlexCNN (L=2, dilated)",physical,0.1,2000,0.140876,0.5646229386329651,PaperPINN_CNN_Flex_L2_dilated_physical_lam0.1_n2000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=1e-05)","FlexCNN (L=2, dilated)",physical,1e-05,2000,0.17222698,0.34253251552581787,PaperPINN_CNN_Flex_L2_dilated_physical_lam1e-05_n2000_1_best.pth
+"FlexCNN (L=2, maxpool)","FlexCNN (L=2, maxpool)",pure,N/A,2000,0.14208655,0.556753933429718,PaperPINN_CNN_Flex_L2_maxpool_pure_n2000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=0.0001)","FlexCNN (L=2, maxpool)",physical,0.0001,2000,0.14197278,0.5576071739196777,PaperPINN_CNN_Flex_L2_maxpool_physical_lam0.0001_n2000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=0.001)","FlexCNN (L=2, maxpool)",physical,0.001,2000,0.14125009,0.5610041618347168,PaperPINN_CNN_Flex_L2_maxpool_physical_lam0.001_n2000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=0.01)","FlexCNN (L=2, maxpool)",physical,0.01,2000,0.13809079,0.5731754302978516,PaperPINN_CNN_Flex_L2_maxpool_physical_lam0.01_n2000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=0.1)","FlexCNN (L=2, maxpool)",physical,0.1,2000,0.08785005,0.8441847562789917,PaperPINN_CNN_Flex_L2_maxpool_physical_lam0.1_n2000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=1e-05)","FlexCNN (L=2, maxpool)",physical,1e-05,2000,0.14209406,0.556743860244751,PaperPINN_CNN_Flex_L2_maxpool_physical_lam1e-05_n2000_1_best.pth
+"FlexCNN (L=2, none)","FlexCNN (L=2, none)",pure,N/A,2000,0.17994794,0.2994595170021057,PaperPINN_CNN_Flex_L2_none_pure_n2000_1_best.pth
+"FlexCNN (L=2, none) (λ=0.0001)","FlexCNN (L=2, none)",physical,0.0001,2000,0.17949538,0.3124364912509918,PaperPINN_CNN_Flex_L2_none_physical_lam0.0001_n2000_1_best.pth
+"FlexCNN (L=2, none) (λ=0.001)","FlexCNN (L=2, none)",physical,0.001,2000,0.17874482,0.3164495527744293,PaperPINN_CNN_Flex_L2_none_physical_lam0.001_n2000_1_best.pth
+"FlexCNN (L=2, none) (λ=0.01)","FlexCNN (L=2, none)",physical,0.01,2000,0.12927939,0.6463060975074768,PaperPINN_CNN_Flex_L2_none_physical_lam0.01_n2000_1_best.pth
+"FlexCNN (L=2, none) (λ=0.1)","FlexCNN (L=2, none)",physical,0.1,2000,0.12724873,0.6654595732688904,PaperPINN_CNN_Flex_L2_none_physical_lam0.1_n2000_1_best.pth
+"FlexCNN (L=2, none) (λ=1e-05)","FlexCNN (L=2, none)",physical,1e-05,2000,0.17981389,0.30341947078704834,PaperPINN_CNN_Flex_L2_none_physical_lam1e-05_n2000_1_best.pth
+"FlexCNN (L=4, dilated)","FlexCNN (L=4, dilated)",pure,N/A,2000,0.10591553,0.7703332901000977,PaperPINN_CNN_Flex_L4_dilated_pure_n2000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=0.0001)","FlexCNN (L=4, dilated)",physical,0.0001,2000,0.105584726,0.7746263742446899,PaperPINN_CNN_Flex_L4_dilated_physical_lam0.0001_n2000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=0.001)","FlexCNN (L=4, dilated)",physical,0.001,2000,0.11006484,0.7524588108062744,PaperPINN_CNN_Flex_L4_dilated_physical_lam0.001_n2000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=0.01)","FlexCNN (L=4, dilated)",physical,0.01,2000,0.12060815,0.693185567855835,PaperPINN_CNN_Flex_L4_dilated_physical_lam0.01_n2000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=0.1)","FlexCNN (L=4, dilated)",physical,0.1,2000,0.077713974,0.8725172877311707,PaperPINN_CNN_Flex_L4_dilated_physical_lam0.1_n2000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=1e-05)","FlexCNN (L=4, dilated)",physical,1e-05,2000,0.10651199,0.7712117433547974,PaperPINN_CNN_Flex_L4_dilated_physical_lam1e-05_n2000_1_best.pth
+"FlexCNN (L=4, maxpool)","FlexCNN (L=4, maxpool)",pure,N/A,2000,0.1120934,0.7346352338790894,PaperPINN_CNN_Flex_L4_maxpool_pure_n2000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=0.0001)","FlexCNN (L=4, maxpool)",physical,0.0001,2000,0.11144894,0.73703533411026,PaperPINN_CNN_Flex_L4_maxpool_physical_lam0.0001_n2000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=0.001)","FlexCNN (L=4, maxpool)",physical,0.001,2000,0.12146275,0.6154605150222778,PaperPINN_CNN_Flex_L4_maxpool_physical_lam0.001_n2000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=0.01)","FlexCNN (L=4, maxpool)",physical,0.01,2000,0.11004038,0.7372855544090271,PaperPINN_CNN_Flex_L4_maxpool_physical_lam0.01_n2000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=0.1)","FlexCNN (L=4, maxpool)",physical,0.1,2000,0.12760244,0.6652677059173584,PaperPINN_CNN_Flex_L4_maxpool_physical_lam0.1_n2000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=1e-05)","FlexCNN (L=4, maxpool)",physical,1e-05,2000,0.11211371,0.7347632646560669,PaperPINN_CNN_Flex_L4_maxpool_physical_lam1e-05_n2000_1_best.pth
+"FlexCNN (L=4, none)","FlexCNN (L=4, none)",pure,N/A,2000,0.14674813,0.3879063129425049,PaperPINN_CNN_Flex_L4_none_pure_n2000_1_best.pth
+"FlexCNN (L=4, none) (λ=0.0001)","FlexCNN (L=4, none)",physical,0.0001,2000,0.0927512,0.8186894059181213,PaperPINN_CNN_Flex_L4_none_physical_lam0.0001_n2000_1_best.pth
+"FlexCNN (L=4, none) (λ=0.001)","FlexCNN (L=4, none)",physical,0.001,2000,0.112704724,0.7679243087768555,PaperPINN_CNN_Flex_L4_none_physical_lam0.001_n2000_1_best.pth
+"FlexCNN (L=4, none) (λ=0.01)","FlexCNN (L=4, none)",physical,0.01,2000,0.11782947,0.7153058052062988,PaperPINN_CNN_Flex_L4_none_physical_lam0.01_n2000_1_best.pth
+"FlexCNN (L=4, none) (λ=0.1)","FlexCNN (L=4, none)",physical,0.1,2000,0.1279261,0.6544210910797119,PaperPINN_CNN_Flex_L4_none_physical_lam0.1_n2000_1_best.pth
+"FlexCNN (L=4, none) (λ=1e-05)","FlexCNN (L=4, none)",physical,1e-05,2000,0.14717516,0.38923048973083496,PaperPINN_CNN_Flex_L4_none_physical_lam1e-05_n2000_1_best.pth
+MLP,MLP,pure,N/A,2000,0.20961042,0.16230440139770508,PaperPINN_MLP_pure_n2000_1_best.pth
+MLP (λ=0.0001),MLP,physical,0.0001,2000,0.20552205,0.23002663254737854,PaperPINN_MLP_physical_lam0.0001_n2000_1_best.pth
+MLP (λ=0.001),MLP,physical,0.001,2000,0.20846389,0.19367966055870056,PaperPINN_MLP_physical_lam0.001_n2000_1_best.pth
+MLP (λ=0.01),MLP,physical,0.01,2000,0.20705518,0.21544450521469116,PaperPINN_MLP_physical_lam0.01_n2000_1_best.pth
+MLP (λ=0.1),MLP,physical,0.1,2000,0.20488225,0.23176798224449158,PaperPINN_MLP_physical_lam0.1_n2000_1_best.pth
+MLP (λ=1e-05),MLP,physical,1e-05,2000,0.20495181,0.23576748371124268,PaperPINN_MLP_physical_lam1e-05_n2000_1_best.pth
+"FlexCNN (L=1, none)","FlexCNN (L=1, none)",pure,N/A,4000,0.18257943,0.4106059968471527,PaperPINN_CNN_Flex_L1_none_pure_n4000_1_best.pth
+"FlexCNN (L=1, none) (λ=0.0001)","FlexCNN (L=1, none)",physical,0.0001,4000,0.18342498,0.40837258100509644,PaperPINN_CNN_Flex_L1_none_physical_lam0.0001_n4000_1_best.pth
+"FlexCNN (L=1, none) (λ=0.001)","FlexCNN (L=1, none)",physical,0.001,4000,0.18208757,0.40954530239105225,PaperPINN_CNN_Flex_L1_none_physical_lam0.001_n4000_1_best.pth
+"FlexCNN (L=1, none) (λ=0.01)","FlexCNN (L=1, none)",physical,0.01,4000,0.17474371,0.4605219066143036,PaperPINN_CNN_Flex_L1_none_physical_lam0.01_n4000_1_best.pth
+"FlexCNN (L=1, none) (λ=0.1)","FlexCNN (L=1, none)",physical,0.1,4000,0.1525944,0.5835523009300232,PaperPINN_CNN_Flex_L1_none_physical_lam0.1_n4000_1_best.pth
+"FlexCNN (L=1, none) (λ=1e-05)","FlexCNN (L=1, none)",physical,1e-05,4000,0.18205367,0.41079309582710266,PaperPINN_CNN_Flex_L1_none_physical_lam1e-05_n4000_1_best.pth
+"FlexCNN (L=2, dilated)","FlexCNN (L=2, dilated)",pure,N/A,4000,0.15450151,0.3910800516605377,PaperPINN_CNN_Flex_L2_dilated_pure_n4000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=0.0001)","FlexCNN (L=2, dilated)",physical,0.0001,4000,0.15348592,0.39723891019821167,PaperPINN_CNN_Flex_L2_dilated_physical_lam0.0001_n4000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=0.001)","FlexCNN (L=2, dilated)",physical,0.001,4000,0.15396075,0.3985137641429901,PaperPINN_CNN_Flex_L2_dilated_physical_lam0.001_n4000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=0.01)","FlexCNN (L=2, dilated)",physical,0.01,4000,0.15121248,0.4277784824371338,PaperPINN_CNN_Flex_L2_dilated_physical_lam0.01_n4000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=0.1)","FlexCNN (L=2, dilated)",physical,0.1,4000,0.108023815,0.7554306983947754,PaperPINN_CNN_Flex_L2_dilated_physical_lam0.1_n4000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=1e-05)","FlexCNN (L=2, dilated)",physical,1e-05,4000,0.15398684,0.3952990174293518,PaperPINN_CNN_Flex_L2_dilated_physical_lam1e-05_n4000_1_best.pth
+"FlexCNN (L=2, maxpool)","FlexCNN (L=2, maxpool)",pure,N/A,4000,0.1253453,0.6408592462539673,PaperPINN_CNN_Flex_L2_maxpool_pure_n4000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=0.0001)","FlexCNN (L=2, maxpool)",physical,0.0001,4000,0.12538584,0.6399424076080322,PaperPINN_CNN_Flex_L2_maxpool_physical_lam0.0001_n4000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=0.001)","FlexCNN (L=2, maxpool)",physical,0.001,4000,0.08465521,0.8501498699188232,PaperPINN_CNN_Flex_L2_maxpool_physical_lam0.001_n4000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=0.01)","FlexCNN (L=2, maxpool)",physical,0.01,4000,0.12632619,0.6406145691871643,PaperPINN_CNN_Flex_L2_maxpool_physical_lam0.01_n4000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=0.1)","FlexCNN (L=2, maxpool)",physical,0.1,4000,0.10106212,0.7989532351493835,PaperPINN_CNN_Flex_L2_maxpool_physical_lam0.1_n4000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=1e-05)","FlexCNN (L=2, maxpool)",physical,1e-05,4000,0.12534356,0.6407785415649414,PaperPINN_CNN_Flex_L2_maxpool_physical_lam1e-05_n4000_1_best.pth
+"FlexCNN (L=2, none)","FlexCNN (L=2, none)",pure,N/A,4000,0.16245353,0.34638655185699463,PaperPINN_CNN_Flex_L2_none_pure_n4000_1_best.pth
+"FlexCNN (L=2, none) (λ=0.0001)","FlexCNN (L=2, none)",physical,0.0001,4000,0.121628106,0.6747695207595825,PaperPINN_CNN_Flex_L2_none_physical_lam0.0001_n4000_1_best.pth
+"FlexCNN (L=2, none) (λ=0.001)","FlexCNN (L=2, none)",physical,0.001,4000,0.16139977,0.35102617740631104,PaperPINN_CNN_Flex_L2_none_physical_lam0.001_n4000_1_best.pth
+"FlexCNN (L=2, none) (λ=0.01)","FlexCNN (L=2, none)",physical,0.01,4000,0.16335176,0.3428325355052948,PaperPINN_CNN_Flex_L2_none_physical_lam0.01_n4000_1_best.pth
+"FlexCNN (L=2, none) (λ=0.1)","FlexCNN (L=2, none)",physical,0.1,4000,0.07713109,0.8868409395217896,PaperPINN_CNN_Flex_L2_none_physical_lam0.1_n4000_1_best.pth
+"FlexCNN (L=2, none) (λ=1e-05)","FlexCNN (L=2, none)",physical,1e-05,4000,0.123336494,0.6706534624099731,PaperPINN_CNN_Flex_L2_none_physical_lam1e-05_n4000_1_best.pth
+"FlexCNN (L=4, dilated)","FlexCNN (L=4, dilated)",pure,N/A,4000,0.09515708,0.8105302453041077,PaperPINN_CNN_Flex_L4_dilated_pure_n4000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=0.0001)","FlexCNN (L=4, dilated)",physical,0.0001,4000,0.14998296,0.35025501251220703,PaperPINN_CNN_Flex_L4_dilated_physical_lam0.0001_n4000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=0.001)","FlexCNN (L=4, dilated)",physical,0.001,4000,0.091128886,0.8303226232528687,PaperPINN_CNN_Flex_L4_dilated_physical_lam0.001_n4000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=0.01)","FlexCNN (L=4, dilated)",physical,0.01,4000,0.085664555,0.8482775688171387,PaperPINN_CNN_Flex_L4_dilated_physical_lam0.01_n4000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=0.1)","FlexCNN (L=4, dilated)",physical,0.1,4000,0.069198,0.900503396987915,PaperPINN_CNN_Flex_L4_dilated_physical_lam0.1_n4000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=1e-05)","FlexCNN (L=4, dilated)",physical,1e-05,4000,0.09292124,0.8224788308143616,PaperPINN_CNN_Flex_L4_dilated_physical_lam1e-05_n4000_1_best.pth
+"FlexCNN (L=4, maxpool)","FlexCNN (L=4, maxpool)",pure,N/A,4000,0.073476054,0.8768995404243469,PaperPINN_CNN_Flex_L4_maxpool_pure_n4000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=0.0001)","FlexCNN (L=4, maxpool)",physical,0.0001,4000,0.073451236,0.8737561106681824,PaperPINN_CNN_Flex_L4_maxpool_physical_lam0.0001_n4000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=0.001)","FlexCNN (L=4, maxpool)",physical,0.001,4000,0.07019434,0.8865106701850891,PaperPINN_CNN_Flex_L4_maxpool_physical_lam0.001_n4000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=0.01)","FlexCNN (L=4, maxpool)",physical,0.01,4000,0.115379035,0.6088905334472656,PaperPINN_CNN_Flex_L4_maxpool_physical_lam0.01_n4000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=0.1)","FlexCNN (L=4, maxpool)",physical,0.1,4000,0.10249581,0.7586503624916077,PaperPINN_CNN_Flex_L4_maxpool_physical_lam0.1_n4000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=1e-05)","FlexCNN (L=4, maxpool)",physical,1e-05,4000,0.07096158,0.8833717107772827,PaperPINN_CNN_Flex_L4_maxpool_physical_lam1e-05_n4000_1_best.pth
+"FlexCNN (L=4, none)","FlexCNN (L=4, none)",pure,N/A,4000,0.07343936,0.8965034484863281,PaperPINN_CNN_Flex_L4_none_pure_n4000_1_best.pth
+"FlexCNN (L=4, none) (λ=0.0001)","FlexCNN (L=4, none)",physical,0.0001,4000,0.07283604,0.8976942896842957,PaperPINN_CNN_Flex_L4_none_physical_lam0.0001_n4000_1_best.pth
+"FlexCNN (L=4, none) (λ=0.001)","FlexCNN (L=4, none)",physical,0.001,4000,0.070849076,0.9036970138549805,PaperPINN_CNN_Flex_L4_none_physical_lam0.001_n4000_1_best.pth
+"FlexCNN (L=4, none) (λ=0.01)","FlexCNN (L=4, none)",physical,0.01,4000,0.087280124,0.8461862802505493,PaperPINN_CNN_Flex_L4_none_physical_lam0.01_n4000_1_best.pth
+"FlexCNN (L=4, none) (λ=0.1)","FlexCNN (L=4, none)",physical,0.1,4000,0.12861559,0.6299100518226624,PaperPINN_CNN_Flex_L4_none_physical_lam0.1_n4000_1_best.pth
+"FlexCNN (L=4, none) (λ=1e-05)","FlexCNN (L=4, none)",physical,1e-05,4000,0.07287411,0.8976706862449646,PaperPINN_CNN_Flex_L4_none_physical_lam1e-05_n4000_1_best.pth
+MLP,MLP,pure,N/A,4000,0.19194366,0.31082993745803833,PaperPINN_MLP_pure_n4000_1_best.pth
+MLP (λ=0.0001),MLP,physical,0.0001,4000,0.18912594,0.32851725816726685,PaperPINN_MLP_physical_lam0.0001_n4000_1_best.pth
+MLP (λ=0.001),MLP,physical,0.001,4000,0.18824147,0.3380882143974304,PaperPINN_MLP_physical_lam0.001_n4000_1_best.pth
+MLP (λ=0.01),MLP,physical,0.01,4000,0.18541124,0.36557701230049133,PaperPINN_MLP_physical_lam0.01_n4000_1_best.pth
+MLP (λ=0.1),MLP,physical,0.1,4000,0.18238749,0.3781033158302307,PaperPINN_MLP_physical_lam0.1_n4000_1_best.pth
+MLP (λ=1e-05),MLP,physical,1e-05,4000,0.1873702,0.3506566882133484,PaperPINN_MLP_physical_lam1e-05_n4000_1_best.pth
+"FlexCNN (L=1, none)","FlexCNN (L=1, none)",pure,N/A,8000,0.16158707,0.5005818605422974,PaperPINN_CNN_Flex_L1_none_pure_n8000_1_best.pth
+"FlexCNN (L=1, none) (λ=0.0001)","FlexCNN (L=1, none)",physical,0.0001,8000,0.16067529,0.5161918997764587,PaperPINN_CNN_Flex_L1_none_physical_lam0.0001_n8000_1_best.pth
+"FlexCNN (L=1, none) (λ=0.001)","FlexCNN (L=1, none)",physical,0.001,8000,0.1611633,0.5045136213302612,PaperPINN_CNN_Flex_L1_none_physical_lam0.001_n8000_1_best.pth
+"FlexCNN (L=1, none) (λ=0.01)","FlexCNN (L=1, none)",physical,0.01,8000,0.15210424,0.5523697137832642,PaperPINN_CNN_Flex_L1_none_physical_lam0.01_n8000_1_best.pth
+"FlexCNN (L=1, none) (λ=0.1)","FlexCNN (L=1, none)",physical,0.1,8000,0.12429952,0.7156431674957275,PaperPINN_CNN_Flex_L1_none_physical_lam0.1_n8000_1_best.pth
+"FlexCNN (L=1, none) (λ=1e-05)","FlexCNN (L=1, none)",physical,1e-05,8000,0.16114847,0.5143358707427979,PaperPINN_CNN_Flex_L1_none_physical_lam1e-05_n8000_1_best.pth
+"FlexCNN (L=2, dilated)","FlexCNN (L=2, dilated)",pure,N/A,8000,0.122170955,0.6443184018135071,PaperPINN_CNN_Flex_L2_dilated_pure_n8000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=0.0001)","FlexCNN (L=2, dilated)",physical,0.0001,8000,0.122223265,0.6428419351577759,PaperPINN_CNN_Flex_L2_dilated_physical_lam0.0001_n8000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=0.001)","FlexCNN (L=2, dilated)",physical,0.001,8000,0.12179905,0.6447391510009766,PaperPINN_CNN_Flex_L2_dilated_physical_lam0.001_n8000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=0.01)","FlexCNN (L=2, dilated)",physical,0.01,8000,0.12278018,0.6476039290428162,PaperPINN_CNN_Flex_L2_dilated_physical_lam0.01_n8000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=0.1)","FlexCNN (L=2, dilated)",physical,0.1,8000,0.081111275,0.865607500076294,PaperPINN_CNN_Flex_L2_dilated_physical_lam0.1_n8000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=1e-05)","FlexCNN (L=2, dilated)",physical,1e-05,8000,0.122238696,0.6441053748130798,PaperPINN_CNN_Flex_L2_dilated_physical_lam1e-05_n8000_1_best.pth
+"FlexCNN (L=2, maxpool)","FlexCNN (L=2, maxpool)",pure,N/A,8000,0.06450191,0.9139215350151062,PaperPINN_CNN_Flex_L2_maxpool_pure_n8000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=0.0001)","FlexCNN (L=2, maxpool)",physical,0.0001,8000,0.060681164,0.9298243522644043,PaperPINN_CNN_Flex_L2_maxpool_physical_lam0.0001_n8000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=0.001)","FlexCNN (L=2, maxpool)",physical,0.001,8000,0.06589711,0.9202556610107422,PaperPINN_CNN_Flex_L2_maxpool_physical_lam0.001_n8000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=0.01)","FlexCNN (L=2, maxpool)",physical,0.01,8000,0.054076504,0.944125771522522,PaperPINN_CNN_Flex_L2_maxpool_physical_lam0.01_n8000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=0.1)","FlexCNN (L=2, maxpool)",physical,0.1,8000,0.067287244,0.9128754138946533,PaperPINN_CNN_Flex_L2_maxpool_physical_lam0.1_n8000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=1e-05)","FlexCNN (L=2, maxpool)",physical,1e-05,8000,0.06569198,0.9101284742355347,PaperPINN_CNN_Flex_L2_maxpool_physical_lam1e-05_n8000_1_best.pth
+"FlexCNN (L=2, none)","FlexCNN (L=2, none)",pure,N/A,8000,0.093687676,0.8171778321266174,PaperPINN_CNN_Flex_L2_none_pure_n8000_1_best.pth
+"FlexCNN (L=2, none) (λ=0.0001)","FlexCNN (L=2, none)",physical,0.0001,8000,0.12915616,0.6088933348655701,PaperPINN_CNN_Flex_L2_none_physical_lam0.0001_n8000_1_best.pth
+"FlexCNN (L=2, none) (λ=0.001)","FlexCNN (L=2, none)",physical,0.001,8000,0.099062055,0.7986787557601929,PaperPINN_CNN_Flex_L2_none_physical_lam0.001_n8000_1_best.pth
+"FlexCNN (L=2, none) (λ=0.01)","FlexCNN (L=2, none)",physical,0.01,8000,0.12672667,0.6314947009086609,PaperPINN_CNN_Flex_L2_none_physical_lam0.01_n8000_1_best.pth
+"FlexCNN (L=2, none) (λ=0.1)","FlexCNN (L=2, none)",physical,0.1,8000,0.08158987,0.8686174154281616,PaperPINN_CNN_Flex_L2_none_physical_lam0.1_n8000_1_best.pth
+"FlexCNN (L=2, none) (λ=1e-05)","FlexCNN (L=2, none)",physical,1e-05,8000,0.094131246,0.8264464139938354,PaperPINN_CNN_Flex_L2_none_physical_lam1e-05_n8000_1_best.pth
+"FlexCNN (L=4, dilated)","FlexCNN (L=4, dilated)",pure,N/A,8000,0.12985238,0.46194806694984436,PaperPINN_CNN_Flex_L4_dilated_pure_n8000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=0.0001)","FlexCNN (L=4, dilated)",physical,0.0001,8000,0.056130636,0.9371873736381531,PaperPINN_CNN_Flex_L4_dilated_physical_lam0.0001_n8000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=0.001)","FlexCNN (L=4, dilated)",physical,0.001,8000,0.12941127,0.46445828676223755,PaperPINN_CNN_Flex_L4_dilated_physical_lam0.001_n8000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=0.01)","FlexCNN (L=4, dilated)",physical,0.01,8000,0.051598888,0.9476341605186462,PaperPINN_CNN_Flex_L4_dilated_physical_lam0.01_n8000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=0.1)","FlexCNN (L=4, dilated)",physical,0.1,8000,0.050679956,0.9483631253242493,PaperPINN_CNN_Flex_L4_dilated_physical_lam0.1_n8000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=1e-05)","FlexCNN (L=4, dilated)",physical,1e-05,8000,0.12730375,0.47668713331222534,PaperPINN_CNN_Flex_L4_dilated_physical_lam1e-05_n8000_1_best.pth
+"FlexCNN (L=4, maxpool)","FlexCNN (L=4, maxpool)",pure,N/A,8000,0.04657883,0.9534937739372253,PaperPINN_CNN_Flex_L4_maxpool_pure_n8000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=0.0001)","FlexCNN (L=4, maxpool)",physical,0.0001,8000,0.048002254,0.9498352408409119,PaperPINN_CNN_Flex_L4_maxpool_physical_lam0.0001_n8000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=0.001)","FlexCNN (L=4, maxpool)",physical,0.001,8000,0.037941165,0.9740721583366394,PaperPINN_CNN_Flex_L4_maxpool_physical_lam0.001_n8000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=0.01)","FlexCNN (L=4, maxpool)",physical,0.01,8000,0.06423477,0.9129734039306641,PaperPINN_CNN_Flex_L4_maxpool_physical_lam0.01_n8000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=0.1)","FlexCNN (L=4, maxpool)",physical,0.1,8000,0.057273306,0.9333859086036682,PaperPINN_CNN_Flex_L4_maxpool_physical_lam0.1_n8000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=1e-05)","FlexCNN (L=4, maxpool)",physical,1e-05,8000,0.054363966,0.9303678274154663,PaperPINN_CNN_Flex_L4_maxpool_physical_lam1e-05_n8000_1_best.pth
+"FlexCNN (L=4, none)","FlexCNN (L=4, none)",pure,N/A,8000,0.060916174,0.931121289730072,PaperPINN_CNN_Flex_L4_none_pure_n8000_1_best.pth
+"FlexCNN (L=4, none) (λ=0.0001)","FlexCNN (L=4, none)",physical,0.0001,8000,0.05997433,0.9332243204116821,PaperPINN_CNN_Flex_L4_none_physical_lam0.0001_n8000_1_best.pth
+"FlexCNN (L=4, none) (λ=0.001)","FlexCNN (L=4, none)",physical,0.001,8000,0.059975896,0.9309136271476746,PaperPINN_CNN_Flex_L4_none_physical_lam0.001_n8000_1_best.pth
+"FlexCNN (L=4, none) (λ=0.01)","FlexCNN (L=4, none)",physical,0.01,8000,0.059561733,0.9319438934326172,PaperPINN_CNN_Flex_L4_none_physical_lam0.01_n8000_1_best.pth
+"FlexCNN (L=4, none) (λ=0.1)","FlexCNN (L=4, none)",physical,0.1,8000,0.065187134,0.912761390209198,PaperPINN_CNN_Flex_L4_none_physical_lam0.1_n8000_1_best.pth
+"FlexCNN (L=4, none) (λ=1e-05)","FlexCNN (L=4, none)",physical,1e-05,8000,0.059271127,0.934556245803833,PaperPINN_CNN_Flex_L4_none_physical_lam1e-05_n8000_1_best.pth
+MLP,MLP,pure,N/A,8000,0.17674085,0.4136364459991455,PaperPINN_MLP_pure_n8000_1_best.pth
+MLP (λ=0.0001),MLP,physical,0.0001,8000,0.17464583,0.4203808903694153,PaperPINN_MLP_physical_lam0.0001_n8000_1_best.pth
+MLP (λ=0.001),MLP,physical,0.001,8000,0.17601767,0.4202479422092438,PaperPINN_MLP_physical_lam0.001_n8000_1_best.pth
+MLP (λ=0.01),MLP,physical,0.01,8000,0.17611288,0.4213917553424835,PaperPINN_MLP_physical_lam0.01_n8000_1_best.pth
+MLP (λ=0.1),MLP,physical,0.1,8000,0.18485408,0.38045352697372437,PaperPINN_MLP_physical_lam0.1_n8000_1_best.pth
+MLP (λ=1e-05),MLP,physical,1e-05,8000,0.17453206,0.41645774245262146,PaperPINN_MLP_physical_lam1e-05_n8000_1_best.pth
+"FlexCNN (L=1, none)","FlexCNN (L=1, none)",pure,N/A,16000,0.14454685,0.5835099220275879,PaperPINN_CNN_Flex_L1_none_pure_n16000_1_best.pth
+"FlexCNN (L=1, none) (λ=0.0001)","FlexCNN (L=1, none)",physical,0.0001,16000,0.14425202,0.5829468965530396,PaperPINN_CNN_Flex_L1_none_physical_lam0.0001_n16000_1_best.pth
+"FlexCNN (L=1, none) (λ=0.001)","FlexCNN (L=1, none)",physical,0.001,16000,0.14407852,0.5846673250198364,PaperPINN_CNN_Flex_L1_none_physical_lam0.001_n16000_1_best.pth
+"FlexCNN (L=1, none) (λ=0.01)","FlexCNN (L=1, none)",physical,0.01,16000,0.12727956,0.7041727304458618,PaperPINN_CNN_Flex_L1_none_physical_lam0.01_n16000_1_best.pth
+"FlexCNN (L=1, none) (λ=0.1)","FlexCNN (L=1, none)",physical,0.1,16000,0.11186931,0.7715835571289062,PaperPINN_CNN_Flex_L1_none_physical_lam0.1_n16000_1_best.pth
+"FlexCNN (L=1, none) (λ=1e-05)","FlexCNN (L=1, none)",physical,1e-05,16000,0.14408287,0.5828798413276672,PaperPINN_CNN_Flex_L1_none_physical_lam1e-05_n16000_1_best.pth
+"FlexCNN (L=2, dilated)","FlexCNN (L=2, dilated)",pure,N/A,16000,0.117213584,0.6748954057693481,PaperPINN_CNN_Flex_L2_dilated_pure_n16000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=0.0001)","FlexCNN (L=2, dilated)",physical,0.0001,16000,0.11705265,0.6758338212966919,PaperPINN_CNN_Flex_L2_dilated_physical_lam0.0001_n16000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=0.001)","FlexCNN (L=2, dilated)",physical,0.001,16000,0.11755125,0.6715912222862244,PaperPINN_CNN_Flex_L2_dilated_physical_lam0.001_n16000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=0.01)","FlexCNN (L=2, dilated)",physical,0.01,16000,0.11806077,0.6684900522232056,PaperPINN_CNN_Flex_L2_dilated_physical_lam0.01_n16000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=0.1)","FlexCNN (L=2, dilated)",physical,0.1,16000,0.122438766,0.6642203330993652,PaperPINN_CNN_Flex_L2_dilated_physical_lam0.1_n16000_1_best.pth
+"FlexCNN (L=2, dilated) (λ=1e-05)","FlexCNN (L=2, dilated)",physical,1e-05,16000,0.11701822,0.6739096641540527,PaperPINN_CNN_Flex_L2_dilated_physical_lam1e-05_n16000_1_best.pth
+"FlexCNN (L=2, maxpool)","FlexCNN (L=2, maxpool)",pure,N/A,16000,0.049734674,0.9511421322822571,PaperPINN_CNN_Flex_L2_maxpool_pure_n16000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=0.0001)","FlexCNN (L=2, maxpool)",physical,0.0001,16000,0.04923585,0.952354907989502,PaperPINN_CNN_Flex_L2_maxpool_physical_lam0.0001_n16000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=0.001)","FlexCNN (L=2, maxpool)",physical,0.001,16000,0.050293796,0.9498729109764099,PaperPINN_CNN_Flex_L2_maxpool_physical_lam0.001_n16000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=0.01)","FlexCNN (L=2, maxpool)",physical,0.01,16000,0.053745057,0.9456533193588257,PaperPINN_CNN_Flex_L2_maxpool_physical_lam0.01_n16000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=0.1)","FlexCNN (L=2, maxpool)",physical,0.1,16000,0.055438694,0.9410138130187988,PaperPINN_CNN_Flex_L2_maxpool_physical_lam0.1_n16000_1_best.pth
+"FlexCNN (L=2, maxpool) (λ=1e-05)","FlexCNN (L=2, maxpool)",physical,1e-05,16000,0.04963765,0.9513281583786011,PaperPINN_CNN_Flex_L2_maxpool_physical_lam1e-05_n16000_1_best.pth
+"FlexCNN (L=2, none)","FlexCNN (L=2, none)",pure,N/A,16000,0.12347428,0.6425444483757019,PaperPINN_CNN_Flex_L2_none_pure_n16000_1_best.pth
+"FlexCNN (L=2, none) (λ=0.0001)","FlexCNN (L=2, none)",physical,0.0001,16000,0.082849145,0.8677526712417603,PaperPINN_CNN_Flex_L2_none_physical_lam0.0001_n16000_1_best.pth
+"FlexCNN (L=2, none) (λ=0.001)","FlexCNN (L=2, none)",physical,0.001,16000,0.07963725,0.8805577158927917,PaperPINN_CNN_Flex_L2_none_physical_lam0.001_n16000_1_best.pth
+"FlexCNN (L=2, none) (λ=0.01)","FlexCNN (L=2, none)",physical,0.01,16000,0.072759956,0.9001534581184387,PaperPINN_CNN_Flex_L2_none_physical_lam0.01_n16000_1_best.pth
+"FlexCNN (L=2, none) (λ=0.1)","FlexCNN (L=2, none)",physical,0.1,16000,0.122654244,0.6661855578422546,PaperPINN_CNN_Flex_L2_none_physical_lam0.1_n16000_1_best.pth
+"FlexCNN (L=2, none) (λ=1e-05)","FlexCNN (L=2, none)",physical,1e-05,16000,0.08174973,0.8738088607788086,PaperPINN_CNN_Flex_L2_none_physical_lam1e-05_n16000_1_best.pth
+"FlexCNN (L=4, dilated)","FlexCNN (L=4, dilated)",pure,N/A,16000,0.053827904,0.9464210867881775,PaperPINN_CNN_Flex_L4_dilated_pure_n16000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=0.0001)","FlexCNN (L=4, dilated)",physical,0.0001,16000,0.05765565,0.936920166015625,PaperPINN_CNN_Flex_L4_dilated_physical_lam0.0001_n16000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=0.001)","FlexCNN (L=4, dilated)",physical,0.001,16000,0.05755097,0.9391046762466431,PaperPINN_CNN_Flex_L4_dilated_physical_lam0.001_n16000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=0.01)","FlexCNN (L=4, dilated)",physical,0.01,16000,0.04950797,0.9519818425178528,PaperPINN_CNN_Flex_L4_dilated_physical_lam0.01_n16000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=0.1)","FlexCNN (L=4, dilated)",physical,0.1,16000,0.045477744,0.9587126970291138,PaperPINN_CNN_Flex_L4_dilated_physical_lam0.1_n16000_1_best.pth
+"FlexCNN (L=4, dilated) (λ=1e-05)","FlexCNN (L=4, dilated)",physical,1e-05,16000,0.05762343,0.9379180669784546,PaperPINN_CNN_Flex_L4_dilated_physical_lam1e-05_n16000_1_best.pth
+"FlexCNN (L=4, maxpool)","FlexCNN (L=4, maxpool)",pure,N/A,16000,0.030295597,0.983171820640564,PaperPINN_CNN_Flex_L4_maxpool_pure_n16000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=0.0001)","FlexCNN (L=4, maxpool)",physical,0.0001,16000,0.04078588,0.9662526845932007,PaperPINN_CNN_Flex_L4_maxpool_physical_lam0.0001_n16000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=0.001)","FlexCNN (L=4, maxpool)",physical,0.001,16000,0.03188221,0.9809067249298096,PaperPINN_CNN_Flex_L4_maxpool_physical_lam0.001_n16000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=0.01)","FlexCNN (L=4, maxpool)",physical,0.01,16000,0.037620682,0.9700382351875305,PaperPINN_CNN_Flex_L4_maxpool_physical_lam0.01_n16000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=0.1)","FlexCNN (L=4, maxpool)",physical,0.1,16000,0.048306014,0.9530221223831177,PaperPINN_CNN_Flex_L4_maxpool_physical_lam0.1_n16000_1_best.pth
+"FlexCNN (L=4, maxpool) (λ=1e-05)","FlexCNN (L=4, maxpool)",physical,1e-05,16000,0.03973102,0.9679100513458252,PaperPINN_CNN_Flex_L4_maxpool_physical_lam1e-05_n16000_1_best.pth
+"FlexCNN (L=4, none)","FlexCNN (L=4, none)",pure,N/A,16000,0.12610707,0.48433762788772583,PaperPINN_CNN_Flex_L4_none_pure_n16000_1_best.pth
+"FlexCNN (L=4, none) (λ=0.0001)","FlexCNN (L=4, none)",physical,0.0001,16000,0.056429073,0.941562294960022,PaperPINN_CNN_Flex_L4_none_physical_lam0.0001_n16000_1_best.pth
+"FlexCNN (L=4, none) (λ=0.001)","FlexCNN (L=4, none)",physical,0.001,16000,0.052185137,0.9485231637954712,PaperPINN_CNN_Flex_L4_none_physical_lam0.001_n16000_1_best.pth
+"FlexCNN (L=4, none) (λ=0.01)","FlexCNN (L=4, none)",physical,0.01,16000,0.049076296,0.9527817368507385,PaperPINN_CNN_Flex_L4_none_physical_lam0.01_n16000_1_best.pth
+"FlexCNN (L=4, none) (λ=0.1)","FlexCNN (L=4, none)",physical,0.1,16000,0.052905068,0.9428715109825134,PaperPINN_CNN_Flex_L4_none_physical_lam0.1_n16000_1_best.pth
+"FlexCNN (L=4, none) (λ=1e-05)","FlexCNN (L=4, none)",physical,1e-05,16000,0.12631081,0.4830402731895447,PaperPINN_CNN_Flex_L4_none_physical_lam1e-05_n16000_1_best.pth
+MLP,MLP,pure,N/A,16000,0.1683045,0.46117690205574036,PaperPINN_MLP_pure_n16000_1_best.pth
+MLP (λ=0.0001),MLP,physical,0.0001,16000,0.16864614,0.4567042589187622,PaperPINN_MLP_physical_lam0.0001_n16000_1_best.pth
+MLP (λ=0.001),MLP,physical,0.001,16000,0.17571631,0.42670702934265137,PaperPINN_MLP_physical_lam0.001_n16000_1_best.pth
+MLP (λ=0.01),MLP,physical,0.01,16000,0.17361452,0.4304848611354828,PaperPINN_MLP_physical_lam0.01_n16000_1_best.pth
+MLP (λ=0.1),MLP,physical,0.1,16000,0.17525779,0.4256134629249573,PaperPINN_MLP_physical_lam0.1_n16000_1_best.pth
+MLP (λ=1e-05),MLP,physical,1e-05,16000,0.16742729,0.46851450204849243,PaperPINN_MLP_physical_lam1e-05_n16000_1_best.pth

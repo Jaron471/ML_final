@@ -14,7 +14,7 @@ from model.dataset import TuringDataset
 from model.model import PaperFlexibleCNN, MLPNet
 
 # Configurations
-SAMPLES = [1000]
+SAMPLES = [2000, 4000, 8000, 16000]  # Number of training samples to use
 LOSS_CONFIGS = [
     # (use_loss, lambda_phy)
     ('pure', 0.0),          # Pure Supervised
@@ -28,12 +28,12 @@ LOSS_CONFIGS = [
 # Architectures to test
 # (layers, sampling)
 ARCHITECTURES = [
-    #(0, 'mlp'),       # MLP
+    (0, 'mlp'),       # MLP
     (1, 'none'),      # Like CNN1
-    (2, 'none'),      # Like CNN2
+    #(2, 'none'),     # Like CNN2
     (2, 'maxpool'),   # Like CNN2Pool
     (2, 'dilated'),   # Like CNN2 but with dilated conv (New)
-    (4, 'none'),      # Deeper without sampling
+    #(4, 'none'),     # Deeper without sampling
     (4, 'maxpool'),   # Deeper with MaxPool
     (4, 'dilated'),   # Deeper with Dilated Conv (New)
 ]

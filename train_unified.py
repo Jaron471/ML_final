@@ -241,7 +241,7 @@ if __name__ == "__main__":
     parser.add_argument('--num-samples', type=int, default=None,
                         help='Total number of samples to use for train+val (None = use all 16000)')
     parser.add_argument('--lr', type=float, default=None,
-                        help='Learning rate (default: 1e-3 for CNN, 1e-4 for MLP)')
+                        help='Learning rate (default: 1e-3)')
     parser.add_argument('--lambda-phy', type=float, default=0.01,
                         help='Weight for physics loss')
     parser.add_argument('--phys-gradual', action='store_true', default=False,
@@ -250,7 +250,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     # Set default learning rate based on model architecture
     if args.lr is None:
-        args.lr = 1e-3 if args.model_arch in ['cnn1', 'cnn2', 'cnn2pool', 'cnn2stride', 'flexible_cnn'] else 1e-4
+        args.lr = 1e-3
     
     set_seed(42)
     train(args)

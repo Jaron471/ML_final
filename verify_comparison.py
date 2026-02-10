@@ -4,6 +4,7 @@ import re
 import torch
 import numpy as np
 import pandas as pd
+from sklearn.metrics import r2_score
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from model import config
@@ -16,7 +17,7 @@ from model.model import (
 
 def main():
     # Update this path if needed - using verified dataset without pattern-less samples
-    TEST_PATH = "test_data_verified.npz"
+    TEST_PATH = "turing_patterns_dataset_clean_test.npz"
     CKPT_DIR = "paper_checkpoints"
     
     if not os.path.exists(CKPT_DIR):
@@ -38,13 +39,13 @@ def main():
         
         # Parse Filename
         # 1. MLP: PaperPINN_MLP_{loss}_n{num}...
-        match_mlp = re.search(r'PaperPINN_MLP_(?P<loss>[a-z]+)(_lam(?P<lam>[\d\.]+))?_n(?P<num>\d+)', filename)
+        match_mlp = re.search(r'PaperPINN_MLP_(?P<loss>[a-z]+)(_lam(?P<lam>[\d\.e\-]+))?_n(?P<num>\d+)', filename)
         
         # 2. Old CNN: PaperPINN_CNN{ver}_{loss}_nk{nk}_n{num}...
-        match_cnn = re.search(r'PaperPINN_CNN(?P<ver>\d*[a-z]*)_(?P<loss>[a-z]+)(_lam(?P<lam>[\d\.]+))?_nk(?P<nk>\d+)_n(?P<num>\d+)', filename)
+        match_cnn = re.search(r'PaperPINN_CNN(?P<ver>\d*[a-z]*)_(?P<loss>[a-z]+)(_lam(?P<lam>[\d\.e\-]+))?_nk(?P<nk>\d+)_n(?P<num>\d+)', filename)
 
         # 4. New Flexible CNN: PaperPINN_CNN_Flex_L{L}_{samp}_{loss}_n{num}...
-        match_flex = re.search(r'PaperPINN_CNN_Flex_L(?P<L>\d+)_(?P<samp>\w+)_(?P<loss>[a-z]+)(_lam(?P<lam>[\d\.]+))?_n(?P<num>\d+)', filename)
+        match_flex = re.search(r'PaperPINN_CNN_Flex_L(?P<L>\d+)_(?P<samp>\w+)_(?P<loss>[a-z]+)(_lam(?P<lam>[\d\.e\-]+))?_n(?P<num>\d+)', filename)
 
         lambda_val = "N/A"
 
@@ -113,18 +114,23 @@ def main():
         norm = np.linalg.norm(np.mean(targets, axis=0))
         nrmse = rmse / norm if norm > 0 else 0
         
+        # R2 Score
+        r2_val = r2_score(targets, preds)
+
         if lambda_val != "N/A":
              desc += f" (λ={lambda_val})"
         
         results.append({
             "Architecture": desc,
+            "BaseArch": desc.split(' (λ')[0], # For grouping pure/physical regardless of lambda
             "Loss": loss,
             "Lambda": lambda_val,
             "Samples": nsamp,
             "NRMSE": nrmse,
+            "R2": r2_val,
             "File": filename
         })
-        print(f"  -> {desc} | {loss} (λ={lambda_val}) | n={nsamp} | NRMSE={nrmse:.2%}")
+        print(f"  -> {desc} | {loss} (λ={lambda_val}) | n={nsamp} | NRMSE={nrmse:.2%} | R2={r2_val:.4f}")
 
     # Print Table
     df = pd.DataFrame(results)
@@ -133,11 +139,88 @@ def main():
         print("\n" + "="*80)
         print("SUMMARY RESULTS")
         print("="*80)
-        print(df.to_string(index=False))
+        print(df[["Architecture", "Loss", "Samples", "NRMSE", "R2"]].to_string(index=False))
         
         # Save CSV
         df.to_csv("comparison_summary.csv", index=False)
         print("\nSaved to comparison_summary.csv")
+        
+        # Calculate Improvements
+        print("\n" + "="*80)
+        print("IMPROVEMENT ANALYSIS (Physical vs Pure)")
+        print("="*80)
+        
+        # Group by BaseArch and Samples
+        grouped = df.groupby(['BaseArch', 'Samples'])
+        
+        best_rows = []
+        
+        for (arch, n_samples), group in grouped:
+            # Find Pure
+            pure_row = group[group['Loss'] == 'pure']
+            if pure_row.empty:
+                continue
+                
+            pure_nrmse = pure_row.iloc[0]['NRMSE']
+            pure_r2 = pure_row.iloc[0]['R2']
+            
+            # Find Physicals
+            phys_rows = group[group['Loss'] == 'physical']
+            
+            # Determine Best Lambda (Lowest NRMSE)
+            best_lambda = None
+            if not phys_rows.empty:
+                best_idx = phys_rows['NRMSE'].idxmin()
+                best_phys_row = phys_rows.loc[best_idx]
+                best_lambda = best_phys_row['Lambda']
+                best_nrmse = best_phys_row['NRMSE']
+                best_r2 = best_phys_row['R2']
+
+                # Calculate metrics for Best Physical
+                best_imp_nrmse = (pure_nrmse - best_nrmse) / pure_nrmse * 100 if pure_nrmse != 0 else 0
+                best_imp_r2 = (best_r2 - pure_r2) / abs(pure_r2) * 100 if pure_r2 != 0 else 0
+
+                best_rows.append({
+                    "Architecture": arch,
+                    "Samples": n_samples,
+                    "Pure_NRMSE": pure_nrmse,
+                    "Pure_R2": pure_r2,
+                    "Best_Physical_Lambda": best_lambda,
+                    "Best_Physical_NRMSE": best_nrmse,
+                    "Best_Physical_R2": best_r2,
+                    "NRMSE_Imp_Pct": best_imp_nrmse,
+                    "R2_Imp_Pct": best_imp_r2
+                })
+
+            for _, phys_row in phys_rows.iterrows():
+                lam = phys_row['Lambda']
+                phy_nrmse = phys_row['NRMSE']
+                phy_r2 = phys_row['R2']
+                
+                # Improvements
+                # NRMSE: Lower is better. (Pure - Phy)/Pure * 100
+                imp_nrmse = (pure_nrmse - phy_nrmse) / pure_nrmse * 100 if pure_nrmse != 0 else 0
+                
+                # R2: Higher is better. (Phy - Pure)/|Pure| * 100 (Use abs for pure in denominator to handle negative R2 correct direction)
+                imp_r2 = (phy_r2 - pure_r2) / abs(pure_r2) * 100 if pure_r2 != 0 else 0
+                
+                is_best = (lam == best_lambda)
+                marker = " <<< \u2605 BEST LAMBDA" if is_best else ""
+
+                print(f"[{arch}] (n={n_samples}) @ \u03bb={lam}{marker}")
+                print(f"  NRMSE: {pure_nrmse:.4f} -> {phy_nrmse:.4f} | Imp: {imp_nrmse:+.2f}%")
+                print(f"  R2   : {pure_r2:.4f} -> {phy_r2:.4f} | Imp: {imp_r2:+.2f}%")
+                print("-" * 40)
+
+        # Save Best Summary CSV
+        if best_rows:
+            best_df = pd.DataFrame(best_rows)
+            # Reorder columns for readability
+            cols = ["Architecture", "Samples", "Pure_NRMSE", "Best_Physical_NRMSE", "NRMSE_Imp_Pct", "Pure_R2", "Best_Physical_R2", "R2_Imp_Pct", "Best_Physical_Lambda"]
+            best_df = best_df[cols]
+            best_df.to_csv("best_physical_comparison.csv", index=False)
+            print("\nSaved best physical comparison to 'best_physical_comparison.csv'")
+
 
 if __name__ == "__main__":
     main()
