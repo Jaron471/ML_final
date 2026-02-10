@@ -27,7 +27,8 @@ def main():
     # Auto-scan all files in checkpoint dir
     model_files = [f for f in os.listdir(CKPT_DIR) if f.endswith('.pth') and 'best' in f]
     
-    dataset = TuringDataset(TEST_PATH)
+    # Set val_split=1 to avoid confusing "Train/Val" log message since this is purely testing
+    dataset = TuringDataset(TEST_PATH, val_split=1.0)
     loader = DataLoader(dataset, batch_size=config.BATCH_SIZE, shuffle=False)
     
     results = []
