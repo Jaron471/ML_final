@@ -91,13 +91,13 @@ MAX_REL_CHANGE      = 1e-6
 CHECK_INTERVAL      = 200
 
 # 檔案路徑
-PARAM_CSV   = "qualified_turing_params_20500.csv"
+PARAM_CSV   = "qualified_turing_params_20000_new.csv"
 OUTPUT_FILENAME_BASE = "turing_patterns_dataset_cupy"
 
 # =============== 範圍設定 (手動調整這裡) ===============
 # 設定要執行的 CSV 行數範圍
-RANGE_START = 20000
-RANGE_END   = 20500   # 設為 None 代表跑到最後
+RANGE_START = 0
+RANGE_END   = 20000   # 設為 None 代表跑到最後
 
 # 設定 GPU 平行工人的數量 (建議 1~4)
 # ⚠️ 注意：每個 Worker 都會佔用約 500MB 顯存。如果你的顯存小於 8GB，建議設為 1 或 2。

@@ -10,7 +10,7 @@ def download_paper_checkpoints():
         print(f"Created directory: {output}")
     
     print(f"Downloading folder from {url} to {output}...")
-    gdown.download_folder(url, output=output, quiet=False, use_cookies=False)
+    gdown.download_folder(url, output=output, quiet=False, use_cookies=False, remaining_ok=True)
     print("Download complete.")
 
 if __name__ == "__main__":

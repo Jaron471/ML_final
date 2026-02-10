@@ -57,13 +57,13 @@ MAX_REL_CHANGE      = 1e-6
 CHECK_INTERVAL      = 200
 
 # 檔案路徑
-PARAM_CSV   = "qualified_turing_params_20000.csv"
+PARAM_CSV   = "qualified_turing_params_20000_new.csv"
 OUTPUT_FILENAME_BASE = "turing_patterns_dataset_mps"
 
 # =============== 範圍設定 (手動調整這裡) ===============
 # 設定要執行的 CSV 行數範圍
-RANGE_START = 7000
-RANGE_END   = 10000   # 設為 None 代表跑到最後
+RANGE_START = 0
+RANGE_END   = 20000   # 設為 None 代表跑到最後
 
 # 設定平行工人的數量
 # ⚠️ 注意：MPS 在多進程下可能有限制，建議設為 1-2
