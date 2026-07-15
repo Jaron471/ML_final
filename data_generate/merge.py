@@ -8,9 +8,8 @@ print("Imports complete.")
 def merge_npz():
     # --- 1. 設定檔案路徑 (舉例) ---
     file_list = [
-        "turing_patterns_dataset_cupy_1_10000.npz",
-        "turing_patterns_dataset_mps_10000_15000.npz",
-        "turing_patterns_dataset_cupy_15000_20000.npz"
+        "turing_patterns_dataset_clean_test.npz",
+        "turing_patterns_dataset_clean_train.npz"
     ]
     
     output_filename = "turing_patterns_dataset_merged.npz"
