@@ -9,18 +9,57 @@
 
 import os
 import time
+import sys
+import glob
 import numpy as np
 import pandas as pd
 from scipy.optimize import fsolve
 from multiprocessing import Pool, set_start_method
 import matplotlib.pyplot as plt
 
+# ==========================================
+# 自動修正：加入 NVIDIA 套件 DLL 路徑 (Windows)
+# 解決 cupy-cuda12x 找不到 nvrtc64_120_0.dll 的問題
+# ==========================================
+if os.name == 'nt':
+    try:
+        # 搜尋 site-packages 中的 nvidia 資料夾
+        site_packages = [p for p in sys.path if 'site-packages' in p]
+        for sp in site_packages:
+            nvidia_path = os.path.join(sp, 'nvidia')
+            if os.path.isdir(nvidia_path):
+                # 遞歸尋找 bin 目錄
+                for root, dirs, files in os.walk(nvidia_path):
+                    if 'bin' in dirs:
+                        bin_path = os.path.join(root, 'bin')
+                        # 加入 DLL 搜尋路徑 (Python 3.8+)
+                        if hasattr(os, 'add_dll_directory'):
+                            try:
+                                os.add_dll_directory(bin_path)
+                            except Exception:
+                                pass
+                        # 同步加入環境變數 PATH (供子進程或其他工具使用)
+                        if bin_path not in os.environ['PATH']:
+                            os.environ['PATH'] = bin_path + os.pathsep + os.environ['PATH']
+    except Exception as e:
+        print(f"⚠️ Warning: Auto-setup of NVIDIA paths failed: {e}")
+
 # 強制引入 CuPy，如果沒裝會直接報錯
 try:
    import cupy as cp
+   # 測試一下 NVRTC 是否可用
+   cp.cuda.Device(0).use()
+   try:
+       # 觸發一次編譯確保 DLL 載入成功
+       cp.ElementwiseKernel('T x', 'T y', 'y = x', 'test_kernel')(cp.array([1.]))
+   except Exception as e:
+       print(f"⚠️ CuPy 載入成功但 NVRTC 可能失敗: {e}")
+       raise e
+
    print(f"✅ 成功載入 CuPy (Device: {cp.cuda.Device(0).compute_capability})")
-except ImportError:
-   raise ImportError("❌ 錯誤：此腳本需要安裝 CuPy (pip install cupy-cuda12x)。")
+except ImportError as e:
+    print(f"❌ CuPy Import Error: {e}")
+    raise ImportError("❌ 錯誤：此腳本需要安裝 CuPy (pip install cupy-cuda12x) 且需正確配置 CUDA 環境。")
 
 # 嘗試引入 tqdm
 try:
@@ -30,7 +69,7 @@ except ImportError:
 
 # =============== 全局模擬參數設定 ===============
 
-# 空間 / 時間離散
+# 模擬參數
 N_GRID = 128           # GPU 可以輕鬆跑 128x128 或更大
 DT = 0.2
 DX = 1.0
@@ -52,17 +91,17 @@ MAX_REL_CHANGE      = 1e-6
 CHECK_INTERVAL      = 200
 
 # 檔案路徑
-PARAM_CSV   = "qualified_turing_params_20000.csv"
+PARAM_CSV   = "qualified_turing_params_20000_new.csv"
 OUTPUT_FILENAME_BASE = "turing_patterns_dataset_cupy"
 
 # =============== 範圍設定 (手動調整這裡) ===============
 # 設定要執行的 CSV 行數範圍
-RANGE_START = 18000
-RANGE_END   = None   # 設為 None 代表跑到最後
+RANGE_START = 0
+RANGE_END   = 20000   # 設為 None 代表跑到最後
 
 # 設定 GPU 平行工人的數量 (建議 1~4)
 # ⚠️ 注意：每個 Worker 都會佔用約 500MB 顯存。如果你的顯存小於 8GB，建議設為 1 或 2。
-GPU_WORKERS = 8
+GPU_WORKERS = 1
 
 
 # =============== 數值方法 (純 CuPy) ===============

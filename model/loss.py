@@ -87,7 +87,7 @@ class GradNorm:
                 self.weights.data = self.ema_weights
             
         return self.get_weights()
-
+        
 class PhysicsLoss(nn.Module):
     def __init__(self, dx=1.0, s_diffusion=0.4):
         super(PhysicsLoss, self).__init__()
@@ -148,22 +148,11 @@ class PhysicsLoss(nn.Module):
         # dv/dt = s * delta * lap_v + Rv
         dv_dt = self.s * delta * lap_v + Rv
 
-        # 4. 回傳 Masked Residual Loss (只在斑紋區域計算)
-        # --- 策略二：Masked Physics Loss ---
-        # 建立遮罩：只關注 u 大於該張圖平均值的地方 (即斑點/條紋本體)
-        # 背景區域通常充滿數值噪聲，會干擾梯度學習
-        u_mean = u.mean(dim=(2, 3), keepdim=True)
-        mask = (u > u_mean).float()  # 轉為 0.0 或 1.0 的浮點數遮罩
-
-        # 套用遮罩到 Residual 上
-        masked_du = du_dt * mask
-        masked_dv = dv_dt * mask
-
-        # 計算 Loss (只除以有效像素數量，避免被大量背景稀釋)
-        # 加上 1e-8 避免除以 0
-        effective_pixels = torch.sum(mask) + 1e-8
+        # 4. 回傳 Physics Loss
+        mask = torch.ones_like(u)
+        pixels = torch.sum(mask)
         
-        loss_u = torch.sum(masked_du**2) / effective_pixels
-        loss_v = torch.sum(masked_dv**2) / effective_pixels
+        loss_u = torch.sum(du_dt**2) / pixels
+        loss_v = torch.sum(dv_dt**2) / pixels
 
         return loss_u + loss_v

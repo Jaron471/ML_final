@@ -2,7 +2,7 @@ import gdown
 import os
 
 def download_paper_checkpoints():
-    url = "https://drive.google.com/drive/folders/1lTS1Ta4SErANKRIQufhfRqAEHnUFzVf0?usp=sharing"
+    url = "https://drive.google.com/drive/folders/1N_5heyvWuY2DNmu8TusR4NE4qIUs1Qrj?usp=sharing"
     output = "paper_checkpoints"
 
     if not os.path.exists(output):
