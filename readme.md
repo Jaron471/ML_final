@@ -1,300 +1,216 @@
-# ML_final — Turing Pattern 參數反推（Unified Training Pipeline）
+# Physical CNN：Reaction–Diffusion PDE 反問題
 
-這個專案的目標是從 **Turing pattern**（反應擴散系統產生的斑紋）影像中，反推出對應的物理參數 **[a, b, c, delta]**。
+本專案使用 CNN 從穩態 Turing pattern 預測 reaction–diffusion PDE
+參數，比較三種方法：
 
-核心入口為 [train_unified.py](train_unified.py)，該腳本統一支援：
+1. **Pure CNN**：只有參數 supervised loss。
+2. **Physical CNN**：supervised loss 加上原始 PDE residual。
+3. **Soft-Constrained Physical CNN**：保留 Physical CNN，訓練時再加入
+   PDE 專屬的 integrated／elimination soft constraints。
 
-- **MLP**（全連接網路）
-- **論文式極簡 CNN**（1-layer / 2-layer / 2-layer+MaxPool / 2-layer+Stride）
-- 兩種訓練策略：
-	- **Pure（純監督）**：只用 supervised loss
-	- **Physical（PINN-like）**：supervised loss + 物理殘差（Physics Loss）
+所有正式模型在 inference 都只執行：
 
-同時提供 [verify_comparison.py](verify_comparison.py) 針對不同 data fraction / loss type / model arch 的評估報表。
-
----
-
-## 1. 專案
-
-### 訓練流程統整
-
-[train_unified.py](train_unified.py) 將「資料載入、模型建立、optimizer/scheduler、loss 設計、存檔與 WandB 記錄」整合為一致的訓練流程 (pipeline)：
-
-1. **資料載入**
-	 - 使用 [model/dataset.py](model/dataset.py) 的 `TuringDataset` 讀取 `train_data.npz` / `val_data.npz`。
-	 - 影像：`u`、`v` 皆會變成 `(N, 1, 128, 128)`。
-	 - 標籤：`a,b,c,delta` 會堆成 `(N, 4)`，再透過 MinMaxScaler 正規化到 `[0,1]`。
-	 - 可用 `--data-fraction` 做 **data ablation**（固定 seed=42 的 random_split）。
-
-2. **模型（Model Architecture）**
-	 - `mlp`：使用 [model/model.py](model/model.py) 的 `MLPNet`（Flatten → 1024 → 512 → 128 → 4，最後 sigmoid）。
-	 - `cnn1/cnn2/cnn2pool/cnn2stride`：在 [train_unified.py](train_unified.py) 內定義的 PaperMinimalCNN 系列。
-		 - 以 `nk`（channels）、`np`（kernel size）、`nf`（hidden neurons）控制容量。
-
-3. **Optimizer / Scheduler**
-	 - MLP：AdamW（預設 `lr=1e-4`，weight_decay=0.01）+ gradient clipping (`max_norm=1.0`)。
-	 - CNN：Adam（預設 `lr=1e-3`）。
-	 - Scheduler：**Warmup(10% epochs) + CosineAnnealing**（SequentialLR）。
-
-4. **Loss 設計（最重要）**
-	 - Supervised Loss：
-		 - MLP：**weighted L1**（權重在 [model/config.py](model/config.py) 的 `LOSS_WEIGHTS`）
-		 - CNN：MSE
-	 - Physics Loss（physical / PINN-like）：
-		 - 由 [model/loss.py](model/loss.py) 的 `PhysicsLoss` 計算 Gierer–Meinhardt 反應擴散方程殘差
-		 - Laplacian 使用 circular padding 以符合週期邊界
-		 - **Masked Physics Loss**：只在 `u > mean(u)` 的斑紋區域計算殘差，避免背景噪聲稀釋梯度
-	 - Physics loss 權重：`loss = loss_sup + λ * loss_phy`
-		 - `λ` 由 `--lambda-phy` 指定，且可用 `--phys-gradual` 做 gradual / warmup（CNN: epoch 20 step；MLP: epoch 20→60 sigmoid warmup）。
-
-5. **Checkpoint 存檔**
-	 - 預設輸出到資料夾 `paper_checkpoints/`
-	 - 每次訓練都會存：
-		 - `*_last.pth`（每個 epoch 覆蓋一次）
-		 - `*_best.pth`（validation NRMSE 最佳才更新）
-	 - 命名格式（由程式自動遞增版本號）：
-		 - `PaperPINN_{ARCH}_{LOSS}_nk{nk}_frac{fraction}_{version}_{best|last}.pth`（CNN 類）
-		 - `PaperPINN_{ARCH}_{LOSS}_frac{fraction}_{version}_{best|last}.pth`（MLP）
-
-6. **評估指標**
-	 - training / validation 主要看 `NRMSE`（normalized space, multi-dim joint）
-	 - [verify_comparison.py](verify_comparison.py) 會輸出更多表格：NRMSE / R²
-
----
-
-## 2. 專案結構
-
-常用檔案：
-
-- [train_unified.py](train_unified.py)：主要訓練入口（MLP/CNN + pure/physical）
-- [verify_comparison.py](verify_comparison.py)：批次載入 checkpoints，輸出比較報表
-- [download_dataset.py](download_dataset.py)：從 Google Drive 下載資料集到專案根目錄
-- [download_checkpoints.py](download_checkpoints.py)：下載預訓練 checkpoints 到 `paper_checkpoints/`
-- [model/config.py](model/config.py)：路徑、超參數、loss weights、WandB project
-- [model/dataset.py](model/dataset.py)：NPZ → Dataset（含 MinMax 正規化）
-- [model/loss.py](model/loss.py)：PhysicsLoss（含 Mask）+ GradNorm
-- [model/utils.py](model/utils.py)：MinMaxScaler、NRMSE、checkpoint 版本號工具
-
-資料檔（預期存在於根目錄）：
-
-- `train_data.npz` / `val_data.npz` / `test_data.npz`
-- `turing_patterns_dataset_merged.npz`（合併大資料集；主要供檢查或重新分割資料使用）
-
----
-
-## 3. Dataset 格式（NPZ）
-
-`TuringDataset` 預期輸入的 `.npz` 檔案至少包含以下 keys：
-
-- `u`: shape `(N, 128, 128)`
-- `v`: shape `(N, 128, 128)`
-- `a`, `b`, `c`, `delta`: shape `(N,)`
-
-訓練過程中，`u`、`v` 將被轉換為 `(N, 1, 128, 128)`，且 `[a,b,c,delta]` 會被正規化至 `[0,1]` 區間。
-
----
-
-## 4. 環境安裝（Windows / Linux / macOS）
-
-建議 Python 3.10+。
-
-### 4.1 建立虛擬環境（Windows PowerShell）
-
-```bash
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
+```text
+u pattern → CNN → predicted parameters
 ```
 
-### 4.2 安裝依賴
+沒有解析 inverse solver、least-squares projection、參數覆寫或
+inference-time postprocessing。
 
-本專案至少需要：`torch, numpy, tqdm, wandb, gdown, pandas`。
+## 支援的 PDE
 
-若使用 NVIDIA GPU，建議依照 PyTorch 官網指示安裝對應 CUDA 版本的 torch。
+| PDE | 預測參數 | 正式模型 |
+| --- | --- | --- |
+| Gierer–Meinhardt | `a, b, c, delta` | `cnn1` |
+| Schnakenberg | `a, b, d` | `cnn2stride` |
+| Brusselator | `A, B, d` | `cnn1` |
+| Lengyel–Epstein | `a, phi, r` | `cnn2stride` |
 
-安裝範例（CPU 版，簡單可跑）：
+Soft constraints 的共用建構原則是：
 
-```bash
-pip install -r requirements.txt
+1. 使用穩態條件令時間微分為零。
+2. 利用週期邊界下空間平均 Laplacian 為零。
+3. 對 PDE 積分、消去未觀測場或建立 moment equation。
+4. 將推導出的關係當作 differentiable penalty，而不是直接解參數。
+
+具體公式依 PDE 而不同，實作位於
+[`model/soft_constraints.py`](model/soft_constraints.py)。
+
+## 資料 protocol
+
+所有正式結果統一使用：
+
+```text
+12,000 training / 4,000 validation / 4,000 final evaluation
+model seed = 42
+split seed = 42
+checkpoint = lowest validation normalized RMSE
 ```
 
----
+### Gierer–Meinhardt
 
-## 5. 資料準備
+```text
+gm_data/gm_train_data.npz       12,000
+gm_data/gm_validation_data.npz   4,000
+gm_data/gm_eval_data.npz         4,000
+```
 
-### 5.1 下載資料集（會把檔案放到根目錄）
+可重新下載：
 
 ```bash
 python download_dataset.py
 ```
 
-注意：此腳本會將 Google Drive 資料夾下載至暫存區後，再 **搬移至專案根目錄**。若根目錄已存在同名檔案，將會被覆蓋。
+### 其他三個 PDE
 
-### 5.2（選配）下載 paper checkpoints
+每個 `*_train_data.npz` 有 16,000 筆。Trainer 使用固定 permutation
+切成 12,000 training 與 4,000 validation；獨立的
+`*_eval_data.npz` 保留 4,000 筆作 final evaluation。
 
-```bash
-python download_checkpoints.py
+```text
+schnakenberg_data/
+brusselator_data/
+lengyel_epstein_data/
 ```
 
----
+每個資料目錄只保留：
 
-## 6. 訓練：train_unified.py
+- `*_train_data.npz`
+- `*_eval_data.npz`
+- 參數 CSV
+- convergence report
+- generation summary
 
-### 6.1 最常用指令（快速開始）
+完整 20,000 筆合併檔與 GPU shards 是上述 train/eval 的重複資料，已
+移除；需要時可用 `data_generate/` 內的固定 seed generator 重建。
 
-1) CNN1 + Pure（25% data）
+## 環境
 
-```bash
-python train_unified.py --model-arch cnn1 --use-loss pure --data-fraction 0.25 --nk 5 --np 5 --nf 5
-```
-
-2) CNN1 + Physical（25% data）
-
-```bash
-python train_unified.py --model-arch cnn1 --use-loss physical --data-fraction 0.25 --nk 5 --np 5 --nf 5 --phys-gradual
-```
-
-3) MLP + Pure（10% data）
+專案不保存 `.venv`。重新建立：
 
 ```bash
-python train_unified.py --model-arch mlp --use-loss pure --data-fraction 0.1
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-4) MLP + Physical（10% data）
+資料生成另需與 CUDA 相容的 CuPy wheel。
+
+## 訓練
+
+### Gierer–Meinhardt
 
 ```bash
-python train_unified.py --model-arch mlp --use-loss physical --data-fraction 0.1 --phys-gradual
+python train_gm.py --loss-type pure
+python train_gm.py --loss-type physical
+python train_gm.py --loss-type soft_physical
 ```
 
-### 6.2 參數說明
+輸出至 `standardized_split_experiments/gm/`。
 
-- `--model-arch`：`mlp | cnn1 | cnn2 | cnn2pool | cnn2stride`
-- `--use-loss`：
-	- `pure`：只跑 supervised
-	- `physical`：supervised + physics residual
-- `--data-fraction`：資料抽樣比例（例如 0.1 = 10%）
-- `--nk --np --nf`：CNN 的容量超參數
-- `--lambda-phy`：physics loss 權重（預設 0.01）
-- `--phys-gradual`：逐步引入 physics loss
-- `--lr`：指定學習率（不填則：CNN=1e-3，MLP=1e-4）
-
-### 6.3 輸出在哪裡
-
-訓練完成後會在 `paper_checkpoints/` 看到：
-
-- `..._best.pth`：validation NRMSE 最佳
-- `..._last.pth`：最後一次 epoch
-
----
-
-## 7. WandB（實驗紀錄）
-
-訓練預設會呼叫 `wandb.init(...)`。
-
-使用者可選擇：
-
-1) 登入使用
+### Schnakenberg
 
 ```bash
-wandb login
+python train_schnakenberg.py \
+  --loss-type pure --model-arch cnn2stride \
+  --validation-count 4000 --validation-seed 42
+
+python train_schnakenberg.py \
+  --loss-type physical --model-arch cnn2stride \
+  --validation-count 4000 --validation-seed 42 \
+  --lambda-physics 0.01
+
+python train_schnakenberg.py \
+  --loss-type soft_physical --model-arch cnn2stride \
+  --validation-count 4000 --validation-seed 42 \
+  --lambda-physics 0.01 \
+  --lambda-identity 0.1 --lambda-elimination 0 \
+  --soft-head-only
 ```
 
-2) 離線模式（不使用 WandB 上傳）
+Brusselator 使用 `train_brusselator.py`；Lengyel–Epstein 使用
+`train_lengyel_epstein.py`。正式 Soft 超參數與完整指令記錄在各
+checkpoint 的 `training_config` 和
+[`standardized_split_experiments/REPORT.md`](standardized_split_experiments/REPORT.md)。
 
-Windows PowerShell：
+## 評估
+
+三個三參數 PDE：
 
 ```bash
-$env:WANDB_MODE="disabled"
-python train_unified.py --model-arch cnn2 --use-loss pure --data-fraction 0.25 --nk 5 --np 5 --nf 5
+python compare_standardized_pde_methods.py \
+  --pde schnakenberg \
+  --experiment-dir standardized_split_experiments/schnakenberg
 ```
 
-（或設定環境變數 `WANDB_API_KEY` 讓它自動登入。）
+將 `--pde` 與目錄替換成 `brusselator` 或 `lengyel_epstein` 即可。
 
----
-
-## 8. 評估：verify_comparison.py
-
-這支腳本會：
-
-- 讀 `test_data.npz`
-- 載入 `paper_checkpoints/` 內指定的模型檔
-- 產出不同 data fraction 的 Pure vs Physical 對照表（NRMSE / R² / ...）
-
-執行：
+GM：
 
 ```bash
-python verify_comparison.py
+python compare_gm_methods.py
 ```
 
-備註：目前 `verify_comparison.py` 內的 `model_files` 需手動指定檔名；若訓練了新模型，需將其檔名加入列表方可進行評估。
+Evaluator 會輸出：
 
----
+- normalized／real parameter metrics
+- per-sample PDE residual
+- steady identity error
+- Pure、Physical、Soft 的 pairwise 5,000 次 bootstrap
+- JSON、CSV 與逐樣本 predictions
 
-## 9. 常見問題（Troubleshooting）
+## 最新結果
 
-### 9.1 找不到資料檔
+### 四個 PDE
 
-確認根目錄存在：`train_data.npz` / `val_data.npz` / `test_data.npz`。
-如果檔名不同，請改 [model/config.py](model/config.py) 的 `TRAIN_PATH / VAL_PATH / TEST_PATH`。
+| PDE | Pure | Physical | Soft-Physical | 最佳 overall |
+| --- | ---: | ---: | ---: | --- |
+| Gierer–Meinhardt | 0.159949 | 0.155344 | **0.152762** | Soft-Physical |
+| Schnakenberg | **0.046468** | 0.046995 | 0.046955 | Pure |
+| Brusselator | 0.133998 | 0.137034 | **0.133553** | Soft-Physical |
+| Lengyel–Epstein | 0.070772 | **0.070030** | 0.070698 | Physical |
 
-### 9.2 ImportError: 找不到 'model'
+Soft-Physical 相對 Pure：
 
-請確認是在「專案根目錄」下執行：
+- 四個 PDE 的 PDE residual 都下降。
+- GM、Brusselator 與 Lengyel–Epstein 的 overall 顯著改善。
+- Schnakenberg 改善 `d` 與物理一致性，但 overall 低於 Pure。
 
-```bash
-python train_unified.py ...
+完整報告：
+
+- [`standardized_split_experiments/REPORT.md`](standardized_split_experiments/REPORT.md)
+
+GM 專屬詳細報告：
+
+- [`standardized_split_experiments/gm/REPORT.md`](standardized_split_experiments/gm/REPORT.md)
+
+## 精簡後的專案結構
+
+```text
+ML_final/
+├── model/                         # CNN、dataset、physical/soft losses
+├── data_generate/                 # 四個 PDE 的資料生成程式
+├── gm_data/                       # GM train/validation/evaluation
+├── *_data/                        # 其他 PDE 的 train/eval 與生成報告
+├── train_gm.py
+├── train_brusselator.py           # 三參數 PDE 共用 trainer
+├── train_schnakenberg.py
+├── train_lengyel_epstein.py
+├── compare_gm_methods.py
+├── compare_standardized_pde_methods.py
+└── standardized_split_experiments/
+    ├── gm/
+    ├── schnakenberg/
+    ├── brusselator/
+    └── lengyel_epstein/
 ```
 
-### 9.3 沒 GPU 可以跑嗎？
+舊的 development trials、hard-projection 實驗、16k 無 validation
+checkpoints、重複資料與暫存檔均不屬於目前的 Physical CNN 主線。
 
-可以，程式會自動選擇 `cpu`。但訓練速度會明顯變慢。
+## Evaluation 限制
 
-### 9.4 `--phys-gradual` 看起來無法關掉？
-
-目前 `train_unified.py` 裡 `--phys-gradual` 的 argparse 設定是 `action='store_true'` 且 `default=True`，因此預設為 True。
-若需要「完全固定 λ」的版本，可將 argparse 的 default 修改為 False（或改為 `--no-phys-gradual` 形式）。
-
----
-
-## 10. 快速檢查 NPZ（可選）
-
-可使用 [inspect_turing_npz.py](inspect_turing_npz.py) 快速檢視 `.npz` 的 keys 與 shape。
-注意：該檔案內的 `NPZ_PATH` 可能需自行修改為當前存在的 npz 檔名。
-
----
-
-## 11. 資料生成 (Data Generation)
-
-若需自行重新生成資料集，請參考 `data_generate/` 資料夾下的腳本。
-
-### 11.1 生成流程
-
-1. **參數生成 (`param-gen.py`)**
-   - 根據論文範圍隨機採樣 `a, b, c, delta`。
-   - 使用 `fsolve` 計算穩態，並檢查 Turing Instability 條件（Jacobian Trace/Det）。
-   - 篩選出符合條件的參數組合。
-
-2. **模擬與生成 (`gm_cupy.py`)**
-   - 使用 **CuPy** 進行 GPU 加速求解 Gierer-Meinhardt 方程。
-   - 採用 FFT 計算 Laplacian，大幅提升速度。
-   - 輸出 `u` 與 `v` 的最終穩態斑紋。
-
-3. **資料合併 (`merge.py`)** (可選)
-   - 若分批生成多個 `.npz` 檔，可使用此腳本將其合併為一個大檔案。
-
-4. **資料分割 (`split.py`)**
-   - 將生成的 `.npz` 分割為 `train`, `val`, `test`。
-   - 預設比例可於腳本內調整（目前設定為固定數量）。
-
-### 11.2 執行方式
-
-```bash
-# 1. 生成參數 (範例)
-python data_generate/param-gen.py
-
-# 2. 執行模擬 (需安裝 cupy)
-python data_generate/gm_cupy.py
-
-# 3. 分割資料
-python data_generate/split.py
-```
+三個 PDE 的 4,000 筆 evaluation 曾在早期實驗中被查看。最新
+checkpoints 僅使用新切出的 validation 選模，沒有使用 evaluation
+挑選 epoch；若後續再依現有 evaluation 調整超參數，正式論文應重新生成
+一批完全未見的 final test。

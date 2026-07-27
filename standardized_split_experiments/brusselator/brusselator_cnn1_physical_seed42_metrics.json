@@ -1,0 +1,132 @@
+{
+  "run_name": "brusselator_cnn1_physical_seed42",
+  "pde": "brusselator",
+  "loss_type": "physical",
+  "seed": 42,
+  "model_arch": "cnn1",
+  "model": {
+    "model_arch": "cnn1",
+    "nk": 5,
+    "kernel_size": 5,
+    "hidden_features": 5,
+    "output_dim": 3,
+    "input_field": "u"
+  },
+  "training": {
+    "train_data": "brusselator_data/brusselator_train_data.npz",
+    "validation_data": "brusselator_data/brusselator_train_data.npz",
+    "eval_data": "brusselator_data/brusselator_eval_data.npz",
+    "train_samples": 12000,
+    "validation_samples": 4000,
+    "eval_samples": 4000,
+    "validation_count": 4000,
+    "validation_seed": 42,
+    "validation_split_file": "standardized_split_experiments/brusselator/brusselator_validation_split_seed42.npz",
+    "selection_metric": "validation_normalized_rmse",
+    "best_epoch": 97,
+    "holdout_count": 0,
+    "holdout_seed": null,
+    "epochs": 100,
+    "batch_size": 256,
+    "learning_rate": 0.001,
+    "min_learning_rate": 1e-06,
+    "lambda_physics": 0.01,
+    "physics_start_epoch": 20,
+    "physics_masked": true,
+    "lambda_identity": 0.0,
+    "lambda_elimination": 0.0,
+    "soft_constraint_start_epoch": null,
+    "soft_constraint_ramp_epochs": null,
+    "hard_projection_at_inference": false,
+    "soft_constraints_update": "entire_cnn",
+    "soft_feature_gradient_scale": 1.0,
+    "supervised_weights": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "duration_seconds": 112.33146786689758
+  },
+  "validation": {
+    "normalized_rmse": 0.13558466732501984,
+    "normalized_mae": 0.1019468754529953,
+    "mean_range_nrmse": 0.1274256855249405,
+    "mean_r2": 0.6650037169456482,
+    "per_parameter": {
+      "A": {
+        "rmse_real": 0.1852196305990219,
+        "mae_real": 0.1524897813796997,
+        "rmse_normalized": 0.19066813588142395,
+        "mae_normalized": 0.15697549283504486,
+        "range_nrmse": 0.19066807627677917,
+        "r2": 0.3738354444503784
+      },
+      "B": {
+        "rmse_real": 0.10601554811000824,
+        "mae_real": 0.08181113004684448,
+        "rmse_normalized": 0.081000916659832,
+        "mae_normalized": 0.06250772625207901,
+        "range_nrmse": 0.08100094646215439,
+        "r2": 0.8425238728523254
+      },
+      "d": {
+        "rmse_real": 5.746807098388672,
+        "mae_real": 4.486824989318848,
+        "rmse_normalized": 0.11060795933008194,
+        "mae_normalized": 0.08635737746953964,
+        "range_nrmse": 0.11060801148414612,
+        "r2": 0.7786518335342407
+      }
+    }
+  },
+  "parameter_names": [
+    "A",
+    "B",
+    "d"
+  ],
+  "scaler": {
+    "data_min": [
+      0.5284992456436157,
+      1.2502923011779785,
+      8.000836372375488
+    ],
+    "data_max": [
+      1.4999237060546875,
+      2.5591108798980713,
+      59.95735168457031
+    ]
+  },
+  "evaluation": {
+    "normalized_rmse": 0.137034073472023,
+    "normalized_mae": 0.10229383409023285,
+    "mean_range_nrmse": 0.1287061870098114,
+    "mean_r2": 0.6625087857246399,
+    "per_parameter": {
+      "A": {
+        "rmse_real": 0.18775753676891327,
+        "mae_real": 0.15356183052062988,
+        "rmse_normalized": 0.19328045845031738,
+        "mae_normalized": 0.15807899832725525,
+        "range_nrmse": 0.1932806372642517,
+        "r2": 0.3638402819633484
+      },
+      "B": {
+        "rmse_real": 0.10804976522922516,
+        "mae_real": 0.08286893367767334,
+        "rmse_normalized": 0.08255520462989807,
+        "mae_normalized": 0.06331588327884674,
+        "range_nrmse": 0.08255518972873688,
+        "r2": 0.8406553268432617
+      },
+      "d": {
+        "rmse_real": 5.729907035827637,
+        "mae_real": 4.441594123840332,
+        "rmse_normalized": 0.11028281599283218,
+        "mae_normalized": 0.0854867547750473,
+        "range_nrmse": 0.11028274148702621,
+        "r2": 0.78303062915802
+      }
+    }
+  },
+  "checkpoint": "standardized_split_experiments/brusselator/brusselator_cnn1_physical_seed42.pt"
+}

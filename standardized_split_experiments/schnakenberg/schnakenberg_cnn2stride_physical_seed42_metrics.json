@@ -1,0 +1,132 @@
+{
+  "run_name": "schnakenberg_cnn2stride_physical_seed42",
+  "pde": "schnakenberg",
+  "loss_type": "physical",
+  "seed": 42,
+  "model_arch": "cnn2stride",
+  "model": {
+    "model_arch": "cnn2stride",
+    "nk": 5,
+    "kernel_size": 5,
+    "hidden_features": 5,
+    "output_dim": 3,
+    "input_field": "u"
+  },
+  "training": {
+    "train_data": "schnakenberg_data/schnakenberg_train_data.npz",
+    "validation_data": "schnakenberg_data/schnakenberg_train_data.npz",
+    "eval_data": "schnakenberg_data/schnakenberg_eval_data.npz",
+    "train_samples": 12000,
+    "validation_samples": 4000,
+    "eval_samples": 4000,
+    "validation_count": 4000,
+    "validation_seed": 42,
+    "validation_split_file": "standardized_split_experiments/schnakenberg/schnakenberg_validation_split_seed42.npz",
+    "selection_metric": "validation_normalized_rmse",
+    "best_epoch": 100,
+    "holdout_count": 0,
+    "holdout_seed": null,
+    "epochs": 100,
+    "batch_size": 256,
+    "learning_rate": 0.001,
+    "min_learning_rate": 1e-06,
+    "lambda_physics": 0.01,
+    "physics_start_epoch": 20,
+    "physics_masked": true,
+    "lambda_identity": 0.0,
+    "lambda_elimination": 0.0,
+    "soft_constraint_start_epoch": null,
+    "soft_constraint_ramp_epochs": null,
+    "hard_projection_at_inference": false,
+    "soft_constraints_update": "entire_cnn",
+    "soft_feature_gradient_scale": 1.0,
+    "supervised_weights": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "duration_seconds": 146.1710169315338
+  },
+  "validation": {
+    "normalized_rmse": 0.047679055482149124,
+    "normalized_mae": 0.03480279818177223,
+    "mean_range_nrmse": 0.04658179357647896,
+    "mean_r2": 0.9605973362922668,
+    "per_parameter": {
+      "a": {
+        "rmse_real": 0.02346542663872242,
+        "mae_real": 0.018103966489434242,
+        "rmse_normalized": 0.05216739699244499,
+        "mae_normalized": 0.04024801775813103,
+        "range_nrmse": 0.052167363464832306,
+        "r2": 0.9396145939826965
+      },
+      "b": {
+        "rmse_real": 0.032304126769304276,
+        "mae_real": 0.025339588522911072,
+        "rmse_normalized": 0.032310958951711655,
+        "mae_normalized": 0.025345008820295334,
+        "range_nrmse": 0.032310985028743744,
+        "r2": 0.9860342741012573
+      },
+      "d": {
+        "rmse_real": 5.083261013031006,
+        "mae_real": 3.5701003074645996,
+        "rmse_normalized": 0.05526701733469963,
+        "mae_normalized": 0.038815371692180634,
+        "range_nrmse": 0.05526704341173172,
+        "r2": 0.9561432600021362
+      }
+    }
+  },
+  "parameter_names": [
+    "a",
+    "b",
+    "d"
+  ],
+  "scaler": {
+    "data_min": [
+      0.050017017871141434,
+      0.5001450181007385,
+      8.022501945495605
+    ],
+    "data_max": [
+      0.49982750415802,
+      1.4999327659606934,
+      99.99884796142578
+    ]
+  },
+  "evaluation": {
+    "normalized_rmse": 0.04699486494064331,
+    "normalized_mae": 0.03464566916227341,
+    "mean_range_nrmse": 0.045837756246328354,
+    "mean_r2": 0.962164580821991,
+    "per_parameter": {
+      "a": {
+        "rmse_real": 0.02265230193734169,
+        "mae_real": 0.017780538648366928,
+        "rmse_normalized": 0.050359658896923065,
+        "mae_normalized": 0.03952895104885101,
+        "range_nrmse": 0.050359658896923065,
+        "r2": 0.9435413479804993
+      },
+      "b": {
+        "rmse_real": 0.03149576112627983,
+        "mae_real": 0.024659499526023865,
+        "rmse_normalized": 0.03150244802236557,
+        "mae_normalized": 0.024664750322699547,
+        "range_nrmse": 0.03150244802236557,
+        "r2": 0.9863569736480713
+      },
+      "d": {
+        "rmse_real": 5.118590831756592,
+        "mae_real": 3.655451774597168,
+        "rmse_normalized": 0.05565112084150314,
+        "mae_normalized": 0.0397433340549469,
+        "range_nrmse": 0.055651161819696426,
+        "r2": 0.9565954804420471
+      }
+    }
+  },
+  "checkpoint": "standardized_split_experiments/schnakenberg/schnakenberg_cnn2stride_physical_seed42.pt"
+}

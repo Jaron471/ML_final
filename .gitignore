@@ -1,9 +1,18 @@
 *.npz
 *.pth
+*.pt
+*.log
 
 wandb/
 __pycache__/
+.venv/
 checkpoints/
+**/shards/
 
 data/
+gm_data/
+schnakenberg_data/
+brusselator_data/
+lengyel_epstein_data/
+qualified_turing_params_20000.csv
 *.png

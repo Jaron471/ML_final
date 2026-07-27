@@ -1,0 +1,132 @@
+{
+  "run_name": "schnakenberg_cnn2stride_pure_seed42",
+  "pde": "schnakenberg",
+  "loss_type": "pure",
+  "seed": 42,
+  "model_arch": "cnn2stride",
+  "model": {
+    "model_arch": "cnn2stride",
+    "nk": 5,
+    "kernel_size": 5,
+    "hidden_features": 5,
+    "output_dim": 3,
+    "input_field": "u"
+  },
+  "training": {
+    "train_data": "schnakenberg_data/schnakenberg_train_data.npz",
+    "validation_data": "schnakenberg_data/schnakenberg_train_data.npz",
+    "eval_data": "schnakenberg_data/schnakenberg_eval_data.npz",
+    "train_samples": 12000,
+    "validation_samples": 4000,
+    "eval_samples": 4000,
+    "validation_count": 4000,
+    "validation_seed": 42,
+    "validation_split_file": "standardized_split_experiments/schnakenberg/schnakenberg_validation_split_seed42.npz",
+    "selection_metric": "validation_normalized_rmse",
+    "best_epoch": 100,
+    "holdout_count": 0,
+    "holdout_seed": null,
+    "epochs": 100,
+    "batch_size": 256,
+    "learning_rate": 0.001,
+    "min_learning_rate": 1e-06,
+    "lambda_physics": 0.0,
+    "physics_start_epoch": 20,
+    "physics_masked": true,
+    "lambda_identity": 0.0,
+    "lambda_elimination": 0.0,
+    "soft_constraint_start_epoch": null,
+    "soft_constraint_ramp_epochs": null,
+    "hard_projection_at_inference": false,
+    "soft_constraints_update": "entire_cnn",
+    "soft_feature_gradient_scale": 1.0,
+    "supervised_weights": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "duration_seconds": 154.94418787956238
+  },
+  "validation": {
+    "normalized_rmse": 0.04702669382095337,
+    "normalized_mae": 0.03456910699605942,
+    "mean_range_nrmse": 0.045955877751111984,
+    "mean_r2": 0.9621785283088684,
+    "per_parameter": {
+      "a": {
+        "rmse_real": 0.022290587425231934,
+        "mae_real": 0.017018916085362434,
+        "rmse_normalized": 0.04955550655722618,
+        "mae_normalized": 0.037835750728845596,
+        "range_nrmse": 0.04955551028251648,
+        "r2": 0.9455098509788513
+      },
+      "b": {
+        "rmse_real": 0.032332438975572586,
+        "mae_real": 0.02539840154349804,
+        "rmse_normalized": 0.03233931213617325,
+        "mae_normalized": 0.0254038218408823,
+        "range_nrmse": 0.03233930468559265,
+        "r2": 0.9860097765922546
+      },
+      "d": {
+        "rmse_real": 5.148174285888672,
+        "mae_real": 3.722075939178467,
+        "rmse_normalized": 0.05597274377942085,
+        "mae_normalized": 0.040467701852321625,
+        "range_nrmse": 0.055972807109355927,
+        "r2": 0.955016016960144
+      }
+    }
+  },
+  "parameter_names": [
+    "a",
+    "b",
+    "d"
+  ],
+  "scaler": {
+    "data_min": [
+      0.050017017871141434,
+      0.5001450181007385,
+      8.022501945495605
+    ],
+    "data_max": [
+      0.49982750415802,
+      1.4999327659606934,
+      99.99884796142578
+    ]
+  },
+  "evaluation": {
+    "normalized_rmse": 0.046468351036310196,
+    "normalized_mae": 0.03448701649904251,
+    "mean_range_nrmse": 0.04526243731379509,
+    "mean_r2": 0.9635847210884094,
+    "per_parameter": {
+      "a": {
+        "rmse_real": 0.021431440487504005,
+        "mae_real": 0.016694629564881325,
+        "rmse_normalized": 0.04764547944068909,
+        "mae_normalized": 0.03711475431919098,
+        "range_nrmse": 0.04764549061655998,
+        "r2": 0.9494631290435791
+      },
+      "b": {
+        "rmse_real": 0.031349342316389084,
+        "mae_real": 0.024599187076091766,
+        "rmse_normalized": 0.03135598823428154,
+        "mae_normalized": 0.02460434101521969,
+        "range_nrmse": 0.031355999410152435,
+        "r2": 0.9864835143089294
+      },
+      "d": {
+        "rmse_real": 5.222951889038086,
+        "mae_real": 3.8392670154571533,
+        "rmse_normalized": 0.05678584799170494,
+        "mae_normalized": 0.04174197092652321,
+        "range_nrmse": 0.056785814464092255,
+        "r2": 0.9548075199127197
+      }
+    }
+  },
+  "checkpoint": "standardized_split_experiments/schnakenberg/schnakenberg_cnn2stride_pure_seed42.pt"
+}

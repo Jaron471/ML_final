@@ -1,0 +1,136 @@
+{
+  "run_name": "gm_cnn1_physical_seed42",
+  "pde": "gierer_meinhardt",
+  "seed": 42,
+  "model": {
+    "model_arch": "cnn1",
+    "nk": 5,
+    "kernel_size": 5,
+    "hidden_features": 5,
+    "input_size": 128,
+    "output_dim": 4,
+    "input_field": "u"
+  },
+  "training": {
+    "loss_type": "physical",
+    "train_data": "gm_data/gm_train_data.npz",
+    "validation_data": "gm_data/gm_validation_data.npz",
+    "train_samples": 12000,
+    "validation_samples": 4000,
+    "epochs": 100,
+    "best_epoch": 96,
+    "batch_size": 256,
+    "learning_rate": 0.001,
+    "min_learning_rate": 1e-06,
+    "lambda_physics": 0.01,
+    "physics_start_epoch": 20,
+    "lambda_integrated": 0.0,
+    "lambda_delta": 0.0,
+    "soft_start_epoch": null,
+    "soft_ramp_epochs": null,
+    "soft_feature_gradient_scale": null,
+    "supervised_weights": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "hard_projection_at_inference": false,
+    "duration_seconds": 171.33833718299866,
+    "eval_data": "gm_data/gm_eval_data.npz",
+    "eval_samples": 4000
+  },
+  "parameter_names": [
+    "a",
+    "b",
+    "c",
+    "delta"
+  ],
+  "scaler": {
+    "data_min": [
+      0.010045643895864487,
+      0.40053558349609375,
+      0.020011311396956444,
+      20.003873825073242
+    ],
+    "data_max": [
+      0.6935838460922241,
+      1.9999827146530151,
+      6.750082015991211,
+      199.9856414794922
+    ]
+  },
+  "validation": {
+    "normalized_rmse": 0.1570136547088623,
+    "normalized_mae": 0.11571744084358215,
+    "paper_joint_nrmse": 0.16440588591660027,
+    "mean_r2": 0.4750499725341797,
+    "per_parameter": {
+      "a": {
+        "rmse_real": 0.1163882166147232,
+        "mae_real": 0.09043774008750916,
+        "rmse_normalized": 0.17027325928211212,
+        "mae_normalized": 0.13230836391448975,
+        "r2": 0.12577104568481445
+      },
+      "b": {
+        "rmse_real": 0.21715697646141052,
+        "mae_real": 0.17912113666534424,
+        "rmse_normalized": 0.1357700675725937,
+        "mae_normalized": 0.11198922991752625,
+        "r2": 0.6058059930801392
+      },
+      "c": {
+        "rmse_real": 0.4602092504501343,
+        "mae_real": 0.3148582875728607,
+        "rmse_normalized": 0.06838104128837585,
+        "mae_normalized": 0.04678383097052574,
+        "r2": 0.826680064201355
+      },
+      "delta": {
+        "rmse_real": 38.815494537353516,
+        "mae_real": 30.918834686279297,
+        "rmse_normalized": 0.2156633734703064,
+        "mae_normalized": 0.17178843915462494,
+        "r2": 0.34194284677505493
+      }
+    }
+  },
+  "checkpoint": "standardized_split_experiments/gm/gm_cnn1_physical_seed42.pt",
+  "evaluation": {
+    "normalized_rmse": 0.15534381568431854,
+    "normalized_mae": 0.11490565538406372,
+    "paper_joint_nrmse": 0.16233900093719522,
+    "mean_r2": 0.47813090682029724,
+    "per_parameter": {
+      "a": {
+        "rmse_real": 0.11640318483114243,
+        "mae_real": 0.08948031812906265,
+        "rmse_normalized": 0.17029516398906708,
+        "mae_normalized": 0.1309075653553009,
+        "r2": 0.11321830749511719
+      },
+      "b": {
+        "rmse_real": 0.21910212934017181,
+        "mae_real": 0.18047744035720825,
+        "rmse_normalized": 0.1369861662387848,
+        "mae_normalized": 0.11283743381500244,
+        "r2": 0.5798656940460205
+      },
+      "c": {
+        "rmse_real": 0.45291584730148315,
+        "mae_real": 0.31673145294189453,
+        "rmse_normalized": 0.0672973245382309,
+        "mae_normalized": 0.04706200957298279,
+        "r2": 0.8306220173835754
+      },
+      "delta": {
+        "rmse_real": 37.8527946472168,
+        "mae_real": 30.383760452270508,
+        "rmse_normalized": 0.21031472086906433,
+        "mae_normalized": 0.16881558299064636,
+        "r2": 0.3888176679611206
+      }
+    }
+  }
+}

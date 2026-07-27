@@ -1,0 +1,132 @@
+{
+  "run_name": "brusselator_cnn1_soft_physical_seed42",
+  "pde": "brusselator",
+  "loss_type": "soft_physical",
+  "seed": 42,
+  "model_arch": "cnn1",
+  "model": {
+    "model_arch": "cnn1",
+    "nk": 5,
+    "kernel_size": 5,
+    "hidden_features": 5,
+    "output_dim": 3,
+    "input_field": "u"
+  },
+  "training": {
+    "train_data": "brusselator_data/brusselator_train_data.npz",
+    "validation_data": "brusselator_data/brusselator_train_data.npz",
+    "eval_data": "brusselator_data/brusselator_eval_data.npz",
+    "train_samples": 12000,
+    "validation_samples": 4000,
+    "eval_samples": 4000,
+    "validation_count": 4000,
+    "validation_seed": 42,
+    "validation_split_file": "standardized_split_experiments/brusselator/brusselator_validation_split_seed42.npz",
+    "selection_metric": "validation_normalized_rmse",
+    "best_epoch": 87,
+    "holdout_count": 0,
+    "holdout_seed": null,
+    "epochs": 100,
+    "batch_size": 256,
+    "learning_rate": 0.001,
+    "min_learning_rate": 1e-06,
+    "lambda_physics": 0.0065,
+    "physics_start_epoch": 20,
+    "physics_masked": true,
+    "lambda_identity": 0.15,
+    "lambda_elimination": 0.05,
+    "soft_constraint_start_epoch": 20,
+    "soft_constraint_ramp_epochs": 20,
+    "hard_projection_at_inference": false,
+    "soft_constraints_update": "scaled_shared_features",
+    "soft_feature_gradient_scale": 0.8,
+    "supervised_weights": [
+      0.7627118825912476,
+      1.3220338821411133,
+      0.9152542352676392
+    ],
+    "duration_seconds": 132.84341835975647
+  },
+  "validation": {
+    "normalized_rmse": 0.13238905370235443,
+    "normalized_mae": 0.09816642105579376,
+    "mean_range_nrmse": 0.12621870636940002,
+    "mean_r2": 0.6802094578742981,
+    "per_parameter": {
+      "A": {
+        "rmse_real": 0.14987275004386902,
+        "mae_real": 0.12086337059736252,
+        "rmse_normalized": 0.15428151190280914,
+        "mae_normalized": 0.12441876530647278,
+        "range_nrmse": 0.15428142249584198,
+        "r2": 0.590022623538971
+      },
+      "B": {
+        "rmse_real": 0.09125963598489761,
+        "mae_real": 0.06881649047136307,
+        "rmse_normalized": 0.06972680240869522,
+        "mae_normalized": 0.052579011768102646,
+        "range_nrmse": 0.06972672790288925,
+        "r2": 0.8833101391792297
+      },
+      "d": {
+        "rmse_real": 8.0349702835083,
+        "mae_real": 6.104977607727051,
+        "rmse_normalized": 0.15464797616004944,
+        "mae_normalized": 0.11750150471925735,
+        "range_nrmse": 0.15464797616004944,
+        "r2": 0.5672957897186279
+      }
+    }
+  },
+  "parameter_names": [
+    "A",
+    "B",
+    "d"
+  ],
+  "scaler": {
+    "data_min": [
+      0.5284992456436157,
+      1.2502923011779785,
+      8.000836372375488
+    ],
+    "data_max": [
+      1.4999237060546875,
+      2.5591108798980713,
+      59.95735168457031
+    ]
+  },
+  "evaluation": {
+    "normalized_rmse": 0.1335531622171402,
+    "normalized_mae": 0.0982096940279007,
+    "mean_range_nrmse": 0.12730978429317474,
+    "mean_r2": 0.679318904876709,
+    "per_parameter": {
+      "A": {
+        "rmse_real": 0.15212373435497284,
+        "mae_real": 0.12161341309547424,
+        "rmse_normalized": 0.15659862756729126,
+        "mae_normalized": 0.12519067525863647,
+        "range_nrmse": 0.15659862756729126,
+        "r2": 0.5823953151702881
+      },
+      "B": {
+        "rmse_real": 0.0919358879327774,
+        "mae_real": 0.06866632401943207,
+        "rmse_normalized": 0.07024333626031876,
+        "mae_normalized": 0.052464310079813004,
+        "range_nrmse": 0.07024341821670532,
+        "r2": 0.8846387267112732
+      },
+      "d": {
+        "rmse_real": 8.057795524597168,
+        "mae_real": 6.077563762664795,
+        "rmse_normalized": 0.15508736670017242,
+        "mae_normalized": 0.116973876953125,
+        "range_nrmse": 0.15508729219436646,
+        "r2": 0.5709224939346313
+      }
+    }
+  },
+  "checkpoint": "standardized_split_experiments/brusselator/brusselator_cnn1_soft_physical_seed42.pt"
+}

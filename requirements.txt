@@ -1,7 +1,9 @@
 numpy
 pandas
-tqdm
-wandb
 gdown
+scipy
+matplotlib
+# Data generation also needs a CUDA-matched CuPy wheel, for example:
+# cupy-cuda13x[ctk]
 # Install torch per https://pytorch.org/get-started/locally/
 torch

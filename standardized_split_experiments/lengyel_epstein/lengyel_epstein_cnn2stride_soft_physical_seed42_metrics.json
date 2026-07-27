@@ -1,0 +1,132 @@
+{
+  "run_name": "lengyel_epstein_cnn2stride_soft_physical_seed42",
+  "pde": "lengyel_epstein",
+  "loss_type": "soft_physical",
+  "seed": 42,
+  "model_arch": "cnn2stride",
+  "model": {
+    "model_arch": "cnn2stride",
+    "nk": 5,
+    "kernel_size": 5,
+    "hidden_features": 5,
+    "output_dim": 3,
+    "input_field": "u"
+  },
+  "training": {
+    "train_data": "lengyel_epstein_data/lengyel_epstein_train_data.npz",
+    "validation_data": "lengyel_epstein_data/lengyel_epstein_train_data.npz",
+    "eval_data": "lengyel_epstein_data/lengyel_epstein_eval_data.npz",
+    "train_samples": 12000,
+    "validation_samples": 4000,
+    "eval_samples": 4000,
+    "validation_count": 4000,
+    "validation_seed": 42,
+    "validation_split_file": "standardized_split_experiments/lengyel_epstein/lengyel_epstein_validation_split_seed42.npz",
+    "selection_metric": "validation_normalized_rmse",
+    "best_epoch": 99,
+    "holdout_count": 0,
+    "holdout_seed": null,
+    "epochs": 100,
+    "batch_size": 256,
+    "learning_rate": 0.001,
+    "min_learning_rate": 1e-06,
+    "lambda_physics": 0.001,
+    "physics_start_epoch": 20,
+    "physics_masked": true,
+    "lambda_identity": 0.5,
+    "lambda_elimination": 1.0,
+    "soft_constraint_start_epoch": 20,
+    "soft_constraint_ramp_epochs": 20,
+    "hard_projection_at_inference": false,
+    "soft_constraints_update": "entire_cnn",
+    "soft_feature_gradient_scale": 1.0,
+    "supervised_weights": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "duration_seconds": 124.62216210365295
+  },
+  "validation": {
+    "normalized_rmse": 0.0709666907787323,
+    "normalized_mae": 0.052064448595047,
+    "mean_range_nrmse": 0.06636371463537216,
+    "mean_r2": 0.9324250221252441,
+    "per_parameter": {
+      "a": {
+        "rmse_real": 0.18331387639045715,
+        "mae_real": 0.14283387362957,
+        "rmse_normalized": 0.04337692633271217,
+        "mae_normalized": 0.033798281103372574,
+        "range_nrmse": 0.043376948684453964,
+        "r2": 0.9800333976745605
+      },
+      "phi": {
+        "rmse_real": 0.05436074733734131,
+        "mae_real": 0.044299595057964325,
+        "rmse_normalized": 0.05436455085873604,
+        "mae_normalized": 0.044302720576524734,
+        "range_nrmse": 0.054364558309316635,
+        "r2": 0.9729971885681152
+      },
+      "r": {
+        "rmse_real": 16.80706787109375,
+        "mae_real": 12.950238227844238,
+        "rmse_normalized": 0.10134975612163544,
+        "mae_normalized": 0.07809235155582428,
+        "range_nrmse": 0.10134962946176529,
+        "r2": 0.8442444801330566
+      }
+    }
+  },
+  "parameter_names": [
+    "a",
+    "phi",
+    "r"
+  ],
+  "scaler": {
+    "data_min": [
+      6.910679817199707,
+      5.654207484440121e-07,
+      54.15099334716797
+    ],
+    "data_max": [
+      11.136746406555176,
+      0.9999304413795471,
+      219.98353576660156
+    ]
+  },
+  "evaluation": {
+    "normalized_rmse": 0.07069818675518036,
+    "normalized_mae": 0.051681894809007645,
+    "mean_range_nrmse": 0.06601041555404663,
+    "mean_r2": 0.9342508912086487,
+    "per_parameter": {
+      "a": {
+        "rmse_real": 0.18094594776630402,
+        "mae_real": 0.14007191359996796,
+        "rmse_normalized": 0.0428166426718235,
+        "mae_normalized": 0.03314473107457161,
+        "range_nrmse": 0.042816635221242905,
+        "r2": 0.9803587198257446
+      },
+      "phi": {
+        "rmse_real": 0.05398526042699814,
+        "mae_real": 0.043978672474622726,
+        "rmse_normalized": 0.053989045321941376,
+        "mae_normalized": 0.04398169741034508,
+        "range_nrmse": 0.053989045321941376,
+        "r2": 0.9731334447860718
+      },
+      "r": {
+        "rmse_real": 16.7864933013916,
+        "mae_real": 12.921538352966309,
+        "rmse_normalized": 0.10122562199831009,
+        "mae_normalized": 0.0779191255569458,
+        "range_nrmse": 0.10122556239366531,
+        "r2": 0.8492606282234192
+      }
+    }
+  },
+  "checkpoint": "standardized_split_experiments/lengyel_epstein/lengyel_epstein_cnn2stride_soft_physical_seed42.pt"
+}

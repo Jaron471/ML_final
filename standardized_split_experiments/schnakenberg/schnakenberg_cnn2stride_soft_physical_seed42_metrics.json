@@ -1,0 +1,132 @@
+{
+  "run_name": "schnakenberg_cnn2stride_soft_physical_seed42",
+  "pde": "schnakenberg",
+  "loss_type": "soft_physical",
+  "seed": 42,
+  "model_arch": "cnn2stride",
+  "model": {
+    "model_arch": "cnn2stride",
+    "nk": 5,
+    "kernel_size": 5,
+    "hidden_features": 5,
+    "output_dim": 3,
+    "input_field": "u"
+  },
+  "training": {
+    "train_data": "schnakenberg_data/schnakenberg_train_data.npz",
+    "validation_data": "schnakenberg_data/schnakenberg_train_data.npz",
+    "eval_data": "schnakenberg_data/schnakenberg_eval_data.npz",
+    "train_samples": 12000,
+    "validation_samples": 4000,
+    "eval_samples": 4000,
+    "validation_count": 4000,
+    "validation_seed": 42,
+    "validation_split_file": "standardized_split_experiments/schnakenberg/schnakenberg_validation_split_seed42.npz",
+    "selection_metric": "validation_normalized_rmse",
+    "best_epoch": 98,
+    "holdout_count": 0,
+    "holdout_seed": null,
+    "epochs": 100,
+    "batch_size": 256,
+    "learning_rate": 0.001,
+    "min_learning_rate": 1e-06,
+    "lambda_physics": 0.01,
+    "physics_start_epoch": 20,
+    "physics_masked": true,
+    "lambda_identity": 0.1,
+    "lambda_elimination": 0.0,
+    "soft_constraint_start_epoch": 20,
+    "soft_constraint_ramp_epochs": 20,
+    "hard_projection_at_inference": false,
+    "soft_constraints_update": "parameter_head_only",
+    "soft_feature_gradient_scale": 0.0,
+    "supervised_weights": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "duration_seconds": 124.22156953811646
+  },
+  "validation": {
+    "normalized_rmse": 0.04764813557267189,
+    "normalized_mae": 0.034768227487802505,
+    "mean_range_nrmse": 0.046540651470422745,
+    "mean_r2": 0.9606204032897949,
+    "per_parameter": {
+      "a": {
+        "rmse_real": 0.023493364453315735,
+        "mae_real": 0.01808769255876541,
+        "rmse_normalized": 0.05222942680120468,
+        "mae_normalized": 0.040211815387010574,
+        "range_nrmse": 0.05222947522997856,
+        "r2": 0.9394707083702087
+      },
+      "b": {
+        "rmse_real": 0.03219158202409744,
+        "mae_real": 0.025271764025092125,
+        "rmse_normalized": 0.032198403030633926,
+        "mae_normalized": 0.02527712658047676,
+        "range_nrmse": 0.03219841793179512,
+        "r2": 0.9861314296722412
+      },
+      "d": {
+        "rmse_real": 5.076549053192139,
+        "mae_real": 3.5701282024383545,
+        "rmse_normalized": 0.05519403517246246,
+        "mae_normalized": 0.038815729320049286,
+        "range_nrmse": 0.05519406870007515,
+        "r2": 0.95625901222229
+      }
+    }
+  },
+  "parameter_names": [
+    "a",
+    "b",
+    "d"
+  ],
+  "scaler": {
+    "data_min": [
+      0.050017017871141434,
+      0.5001450181007385,
+      8.022501945495605
+    ],
+    "data_max": [
+      0.49982750415802,
+      1.4999327659606934,
+      99.99884796142578
+    ]
+  },
+  "evaluation": {
+    "normalized_rmse": 0.04695477709174156,
+    "normalized_mae": 0.03459819778800011,
+    "mean_range_nrmse": 0.04578613117337227,
+    "mean_r2": 0.9622049331665039,
+    "per_parameter": {
+      "a": {
+        "rmse_real": 0.02267124317586422,
+        "mae_real": 0.0177635308355093,
+        "rmse_normalized": 0.05040176212787628,
+        "mae_normalized": 0.03949112817645073,
+        "range_nrmse": 0.05040176957845688,
+        "r2": 0.9434468746185303
+      },
+      "b": {
+        "rmse_real": 0.03136414662003517,
+        "mae_real": 0.024570904672145844,
+        "rmse_normalized": 0.031370799988508224,
+        "mae_normalized": 0.02457612007856369,
+        "range_nrmse": 0.03137080371379852,
+        "r2": 0.9864707589149475
+      },
+      "d": {
+        "rmse_real": 5.112581729888916,
+        "mae_real": 3.6539735794067383,
+        "rmse_normalized": 0.05558585003018379,
+        "mae_normalized": 0.03972727432847023,
+        "range_nrmse": 0.0555858314037323,
+        "r2": 0.9566973447799683
+      }
+    }
+  },
+  "checkpoint": "standardized_split_experiments/schnakenberg/schnakenberg_cnn2stride_soft_physical_seed42.pt"
+}

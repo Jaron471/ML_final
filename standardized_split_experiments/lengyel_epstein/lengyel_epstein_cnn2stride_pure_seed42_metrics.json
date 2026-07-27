@@ -1,0 +1,132 @@
+{
+  "run_name": "lengyel_epstein_cnn2stride_pure_seed42",
+  "pde": "lengyel_epstein",
+  "loss_type": "pure",
+  "seed": 42,
+  "model_arch": "cnn2stride",
+  "model": {
+    "model_arch": "cnn2stride",
+    "nk": 5,
+    "kernel_size": 5,
+    "hidden_features": 5,
+    "output_dim": 3,
+    "input_field": "u"
+  },
+  "training": {
+    "train_data": "lengyel_epstein_data/lengyel_epstein_train_data.npz",
+    "validation_data": "lengyel_epstein_data/lengyel_epstein_train_data.npz",
+    "eval_data": "lengyel_epstein_data/lengyel_epstein_eval_data.npz",
+    "train_samples": 12000,
+    "validation_samples": 4000,
+    "eval_samples": 4000,
+    "validation_count": 4000,
+    "validation_seed": 42,
+    "validation_split_file": "standardized_split_experiments/lengyel_epstein/lengyel_epstein_validation_split_seed42.npz",
+    "selection_metric": "validation_normalized_rmse",
+    "best_epoch": 99,
+    "holdout_count": 0,
+    "holdout_seed": null,
+    "epochs": 100,
+    "batch_size": 256,
+    "learning_rate": 0.001,
+    "min_learning_rate": 1e-06,
+    "lambda_physics": 0.0,
+    "physics_start_epoch": 20,
+    "physics_masked": true,
+    "lambda_identity": 0.0,
+    "lambda_elimination": 0.0,
+    "soft_constraint_start_epoch": null,
+    "soft_constraint_ramp_epochs": null,
+    "hard_projection_at_inference": false,
+    "soft_constraints_update": "entire_cnn",
+    "soft_feature_gradient_scale": 1.0,
+    "supervised_weights": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "duration_seconds": 128.17942214012146
+  },
+  "validation": {
+    "normalized_rmse": 0.07107459753751755,
+    "normalized_mae": 0.052184294909238815,
+    "mean_range_nrmse": 0.066497802734375,
+    "mean_r2": 0.9322435259819031,
+    "per_parameter": {
+      "a": {
+        "rmse_real": 0.1842939406633377,
+        "mae_real": 0.14374519884586334,
+        "rmse_normalized": 0.043608829379081726,
+        "mae_normalized": 0.03401400148868561,
+        "range_nrmse": 0.043608859181404114,
+        "r2": 0.9798192977905273
+      },
+      "phi": {
+        "rmse_real": 0.05445369333028793,
+        "mae_real": 0.0443868525326252,
+        "rmse_normalized": 0.054457515478134155,
+        "mae_normalized": 0.044389981776475906,
+        "range_nrmse": 0.05445751175284386,
+        "r2": 0.9729048013687134
+      },
+      "r": {
+        "rmse_real": 16.819904327392578,
+        "mae_real": 12.959632873535156,
+        "rmse_normalized": 0.10142706334590912,
+        "mae_normalized": 0.07814909517765045,
+        "range_nrmse": 0.10142704099416733,
+        "r2": 0.8440064787864685
+      }
+    }
+  },
+  "parameter_names": [
+    "a",
+    "phi",
+    "r"
+  ],
+  "scaler": {
+    "data_min": [
+      6.910679817199707,
+      5.654207484440121e-07,
+      54.15099334716797
+    ],
+    "data_max": [
+      11.136746406555176,
+      0.9999304413795471,
+      219.98353576660156
+    ]
+  },
+  "evaluation": {
+    "normalized_rmse": 0.07077229022979736,
+    "normalized_mae": 0.051801763474941254,
+    "mean_range_nrmse": 0.06613097339868546,
+    "mean_r2": 0.9341500401496887,
+    "per_parameter": {
+      "a": {
+        "rmse_real": 0.18206246197223663,
+        "mae_real": 0.14104413986206055,
+        "rmse_normalized": 0.04308084398508072,
+        "mae_normalized": 0.03337479755282402,
+        "range_nrmse": 0.043080832809209824,
+        "r2": 0.9801155924797058
+      },
+      "phi": {
+        "rmse_real": 0.05410164222121239,
+        "mae_real": 0.04408892244100571,
+        "rmse_normalized": 0.05410544201731682,
+        "mae_normalized": 0.044091951102018356,
+        "range_nrmse": 0.05410543456673622,
+        "r2": 0.9730175137519836
+      },
+      "r": {
+        "rmse_real": 16.783355712890625,
+        "mae_real": 12.924745559692383,
+        "rmse_normalized": 0.10120679438114166,
+        "mae_normalized": 0.0779384896159172,
+        "range_nrmse": 0.10120664536952972,
+        "r2": 0.8493170142173767
+      }
+    }
+  },
+  "checkpoint": "standardized_split_experiments/lengyel_epstein/lengyel_epstein_cnn2stride_pure_seed42.pt"
+}

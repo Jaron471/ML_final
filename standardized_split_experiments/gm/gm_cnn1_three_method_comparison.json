@@ -1,0 +1,334 @@
+{
+  "protocol": {
+    "pde": "gierer_meinhardt",
+    "architecture": "cnn1",
+    "model_seed": 42,
+    "train_samples": 12000,
+    "validation_samples": 4000,
+    "evaluation_samples": 4000,
+    "selection_metric": "validation_normalized_rmse",
+    "bootstrap_samples": 5000,
+    "evaluation_data": "gm_data/gm_eval_data.npz"
+  },
+  "inference_audit": {
+    "prediction_path": "raw model(u) output",
+    "hard_projection_at_inference": false,
+    "least_squares_at_inference": false,
+    "parameter_postprocessing": false
+  },
+  "evaluation": {
+    "pure": {
+      "normalized_rmse": 0.15994872152805328,
+      "normalized_mae": 0.11745213717222214,
+      "paper_joint_nrmse": 0.16715126726906449,
+      "mean_r2": 0.4770510196685791,
+      "per_parameter": {
+        "a": {
+          "rmse_real": 0.10042306780815125,
+          "mae_real": 0.07179643213748932,
+          "rmse_normalized": 0.14691632986068726,
+          "mae_normalized": 0.10503637790679932,
+          "r2": 0.3399847745895386
+        },
+        "b": {
+          "rmse_real": 0.2033633291721344,
+          "mae_real": 0.16498684883117676,
+          "rmse_normalized": 0.12714600563049316,
+          "mae_normalized": 0.10315249860286713,
+          "r2": 0.6380569934844971
+        },
+        "c": {
+          "rmse_real": 0.5838037133216858,
+          "mae_real": 0.42340168356895447,
+          "rmse_normalized": 0.08674556016921997,
+          "mae_normalized": 0.06291212141513824,
+          "r2": 0.7185795307159424
+        },
+        "delta": {
+          "rmse_real": 42.99229431152344,
+          "mae_real": 35.76372528076172,
+          "rmse_normalized": 0.23887024819850922,
+          "mae_normalized": 0.19870765507221222,
+          "r2": 0.2115827202796936
+        }
+      }
+    },
+    "physical": {
+      "normalized_rmse": 0.15534381568431854,
+      "normalized_mae": 0.11490565538406372,
+      "paper_joint_nrmse": 0.16233900093719522,
+      "mean_r2": 0.47813090682029724,
+      "per_parameter": {
+        "a": {
+          "rmse_real": 0.11640318483114243,
+          "mae_real": 0.08948031812906265,
+          "rmse_normalized": 0.17029516398906708,
+          "mae_normalized": 0.1309075653553009,
+          "r2": 0.11321830749511719
+        },
+        "b": {
+          "rmse_real": 0.21910212934017181,
+          "mae_real": 0.18047744035720825,
+          "rmse_normalized": 0.1369861662387848,
+          "mae_normalized": 0.11283743381500244,
+          "r2": 0.5798656940460205
+        },
+        "c": {
+          "rmse_real": 0.45291584730148315,
+          "mae_real": 0.31673145294189453,
+          "rmse_normalized": 0.0672973245382309,
+          "mae_normalized": 0.04706200957298279,
+          "r2": 0.8306220173835754
+        },
+        "delta": {
+          "rmse_real": 37.8527946472168,
+          "mae_real": 30.383760452270508,
+          "rmse_normalized": 0.21031472086906433,
+          "mae_normalized": 0.16881558299064636,
+          "r2": 0.3888176679611206
+        }
+      }
+    },
+    "soft_physical": {
+      "normalized_rmse": 0.15276168286800385,
+      "normalized_mae": 0.11240892857313156,
+      "paper_joint_nrmse": 0.1596405937953267,
+      "mean_r2": 0.4904884099960327,
+      "per_parameter": {
+        "a": {
+          "rmse_real": 0.11673662811517715,
+          "mae_real": 0.08864807337522507,
+          "rmse_normalized": 0.1707828789949417,
+          "mae_normalized": 0.1296902298927307,
+          "r2": 0.1081305742263794
+        },
+        "b": {
+          "rmse_real": 0.22676041722297668,
+          "mae_real": 0.18755342066287994,
+          "rmse_normalized": 0.1417742669582367,
+          "mae_normalized": 0.11726129055023193,
+          "r2": 0.5499824285507202
+        },
+        "c": {
+          "rmse_real": 0.4090431034564972,
+          "mae_real": 0.2888258993625641,
+          "rmse_normalized": 0.06077843904495239,
+          "mae_normalized": 0.042915765196084976,
+          "r2": 0.8618471026420593
+        },
+        "delta": {
+          "rmse_real": 36.16864013671875,
+          "mae_real": 28.755420684814453,
+          "rmse_normalized": 0.20095717906951904,
+          "mae_normalized": 0.15976828336715698,
+          "r2": 0.4419935345649719
+        }
+      }
+    }
+  },
+  "best_epoch": {
+    "pure": 71,
+    "physical": 96,
+    "soft_physical": 94
+  },
+  "improvement_percent": {
+    "physical": {
+      "overall_normalized_rmse": 2.8789888407623754,
+      "a_rmse": -15.912795109505796,
+      "b_rmse": -7.739251826820508,
+      "c_rmse": 22.419841298282595,
+      "delta_rmse": 11.954467065808757
+    },
+    "soft_physical": {
+      "overall_normalized_rmse": 4.49333923484278,
+      "a_rmse": -16.244833645384563,
+      "b_rmse": -11.505067381660588,
+      "c_rmse": 29.934823276619436,
+      "delta_rmse": 15.87180745777438
+    }
+  },
+  "diagnostics": {
+    "original_masked_pde_residual_mean": {
+      "true_parameters": 0.019634896889328957,
+      "pure": 0.9703018665313721,
+      "physical": 0.8251363635063171,
+      "soft_physical": 0.7359904646873474
+    },
+    "integrated_first_equation_rmse": {
+      "true_parameters": 0.041154563426971436,
+      "pure": 0.19838052988052368,
+      "physical": 0.15822499990463257,
+      "soft_physical": 0.1460571587085724
+    },
+    "delta_normal_equation_rmse": {
+      "true_parameters": 1.5149099681366351e-06,
+      "pure": 0.04950687289237976,
+      "physical": 0.04484707489609718,
+      "soft_physical": 0.04244794696569443
+    }
+  },
+  "pairwise": {
+    "physical_vs_pure": {
+      "candidate": "physical",
+      "reference": "pure",
+      "normalized_squared_error": {
+        "overall": {
+          "mean_physical_minus_pure": -0.0014518933603540063,
+          "ci95": [
+            -0.0018142350221751259,
+            -0.001095894307945855
+          ],
+          "physical_better_probability": 1.0
+        },
+        "a": {
+          "mean_physical_minus_pure": 0.007415982894599438,
+          "ci95": [
+            0.006613758893217891,
+            0.008197764912620187
+          ],
+          "physical_better_probability": 0.0
+        },
+        "b": {
+          "mean_physical_minus_pure": 0.002599094295874238,
+          "ci95": [
+            0.002289643051335588,
+            0.002921035914914682
+          ],
+          "physical_better_probability": 0.0
+        },
+        "c": {
+          "mean_physical_minus_pure": -0.0029958582017570734,
+          "ci95": [
+            -0.0033147819689475,
+            -0.0027113600343000146
+          ],
+          "physical_better_probability": 1.0
+        },
+        "delta": {
+          "mean_physical_minus_pure": -0.01282679196447134,
+          "ci95": [
+            -0.014164376677945257,
+            -0.011468501552008093
+          ],
+          "physical_better_probability": 1.0
+        }
+      },
+      "original_pde_residual": {
+        "mean_physical_minus_pure": -0.1451655924320221,
+        "ci95": [
+          -0.21143002063035965,
+          -0.08336866162717345
+        ],
+        "physical_better_probability": 1.0
+      }
+    },
+    "soft_physical_vs_pure": {
+      "candidate": "soft_physical",
+      "reference": "pure",
+      "normalized_squared_error": {
+        "overall": {
+          "mean_physical_minus_pure": -0.002247460884973407,
+          "ci95": [
+            -0.002699473698157817,
+            -0.0018206275301054136
+          ],
+          "physical_better_probability": 1.0
+        },
+        "a": {
+          "mean_physical_minus_pure": 0.007582344580441713,
+          "ci95": [
+            0.006657648156397045,
+            0.008496570494025945
+          ],
+          "physical_better_probability": 0.0
+        },
+        "b": {
+          "mean_physical_minus_pure": 0.003933825995773077,
+          "ci95": [
+            0.003529593872372061,
+            0.004341220273636281
+          ],
+          "physical_better_probability": 0.0
+        },
+        "c": {
+          "mean_physical_minus_pure": -0.003830770729109645,
+          "ci95": [
+            -0.004212481423746794,
+            -0.003483499208232388
+          ],
+          "physical_better_probability": 1.0
+        },
+        "delta": {
+          "mean_physical_minus_pure": -0.01667524315416813,
+          "ci95": [
+            -0.018195827165618537,
+            -0.015250097843818367
+          ],
+          "physical_better_probability": 1.0
+        }
+      },
+      "original_pde_residual": {
+        "mean_physical_minus_pure": -0.23431146144866943,
+        "ci95": [
+          -0.30451177433133125,
+          -0.1668384995311499
+        ],
+        "physical_better_probability": 1.0
+      }
+    },
+    "soft_physical_vs_physical": {
+      "candidate": "soft_physical",
+      "reference": "physical",
+      "normalized_squared_error": {
+        "overall": {
+          "mean_physical_minus_pure": -0.0007955674082040787,
+          "ci95": [
+            -0.0009396460154675879,
+            -0.0006534116371767596
+          ],
+          "physical_better_probability": 1.0
+        },
+        "a": {
+          "mean_physical_minus_pure": 0.00016636190412100405,
+          "ci95": [
+            -9.427503500774037e-05,
+            0.0004336350393714383
+          ],
+          "physical_better_probability": 0.1042
+        },
+        "b": {
+          "mean_physical_minus_pure": 0.0013347318163141608,
+          "ci95": [
+            0.0011873933457536624,
+            0.0014835028705419968
+          ],
+          "physical_better_probability": 0.0
+        },
+        "c": {
+          "mean_physical_minus_pure": -0.0008349124109372497,
+          "ci95": [
+            -0.0009597531796316616,
+            -0.0007196437669335867
+          ],
+          "physical_better_probability": 1.0
+        },
+        "delta": {
+          "mean_physical_minus_pure": -0.003848450956866145,
+          "ci95": [
+            -0.0043552274815738205,
+            -0.003365719772409648
+          ],
+          "physical_better_probability": 1.0
+        }
+      },
+      "original_pde_residual": {
+        "mean_physical_minus_pure": -0.08914587646722794,
+        "ci95": [
+          -0.11747050359845161,
+          -0.06325857061892748
+        ],
+        "physical_better_probability": 1.0
+      }
+    }
+  }
+}

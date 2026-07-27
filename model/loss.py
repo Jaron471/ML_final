@@ -2,92 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-class GradNorm:
-    """
-    GradNorm: Gradient Normalization for Multi-Task Learning
-    動態調整多任務loss的權重，確保各個任務的梯度範數保持平衡
-    """
-    def __init__(self, num_tasks, alpha=1.5, device='cpu'):
-        self.num_tasks = num_tasks
-        self.alpha = alpha
-        self.device = device
-        
-        # 初始化權重 (第一個任務權重固定為1，其餘為可學習參數)
-        self.weights = nn.Parameter(torch.ones(num_tasks - 1, device=device))
-        
-    def get_weights(self):
-        """獲取當前權重 (第一個任務權重為1)"""
-        return torch.cat([torch.ones(1, device=self.device), self.weights])
-    
-    def compute_grad_norm(self, model, loss):
-        """計算特定loss下的梯度範數"""
-        # 清除之前的梯度
-        model.zero_grad()
-        
-        # 反向傳播
-        loss.backward(retain_graph=True)
-        
-        # 計算梯度範數
-        total_norm = 0
-        param_count = 0
-        for param in model.parameters():
-            if param.grad is not None:
-                param_norm = param.grad.data.norm(2)
-                total_norm += param_norm.item() ** 2
-                param_count += 1
-        
-        grad_norm = total_norm ** (1. / 2) if param_count > 0 else 0.0
-        return grad_norm
-    
-    def adjust_weights(self, model, losses, initial_weights):
-        """
-        使用GradNorm調整權重 - 簡化版本
-        
-        Args:
-            model: 神經網路模型
-            losses: 各個任務的loss (list)
-            initial_weights: 初始權重
-            
-        Returns:
-            adjusted_weights: 調整後的權重
-        """
-        if len(losses) != self.num_tasks:
-            raise ValueError(f"Expected {self.num_tasks} losses, got {len(losses)}")
-        
-        # 計算各任務的梯度範數
-        grad_norms = []
-        for loss in losses:
-            grad_norm = self.compute_grad_norm(model, loss)
-            grad_norms.append(grad_norm)
-        
-        grad_norms = torch.tensor(grad_norms, device=self.device)
-        
-        # GradNorm算法 - 簡化版本
-        # 根據梯度範數的比例調整權重
-        if grad_norms[0] > 0:
-            # 計算權重調整因子，使所有任務的加權梯度範數相似
-            weight_factors = grad_norms / grad_norms[0]
-            adjusted_weights = initial_weights / weight_factors
-            
-            # 限制權重範圍
-            adjusted_weights = torch.clamp(adjusted_weights, min=0.1, max=5.0)
-            
-            # 更新可學習權重 (簡單的指數移動平均)
-            with torch.no_grad():
-                target_weights = adjusted_weights[1:]  # 除了第一個任務
-                if hasattr(self, 'ema_weights'):
-                    self.ema_weights = 0.9 * self.ema_weights + 0.1 * target_weights
-                else:
-                    self.ema_weights = target_weights
-                
-                self.weights.data = self.ema_weights
-            
-        return self.get_weights()
-
 class PhysicsLoss(nn.Module):
     def __init__(self, dx=1.0, s_diffusion=0.4):
         super(PhysicsLoss, self).__init__()
@@ -167,3 +81,200 @@ class PhysicsLoss(nn.Module):
         loss_v = torch.sum(masked_dv**2) / effective_pixels
 
         return loss_u + loss_v
+
+
+class BrusselatorPhysicsLoss(nn.Module):
+    """Steady spectral PDE residual for the three-parameter Brusselator.
+
+    The generated data use
+
+        0 = Laplacian(u) + A - (B + 1)u + u^2 v
+        0 = d Laplacian(v) + B u - u^2 v
+
+    with periodic boundaries, ``gamma=1`` and ``D_u=1``.  A spectral
+    Laplacian is used here so the training constraint matches the FFT-based
+    data generator rather than introducing finite-difference truncation error.
+    """
+
+    def __init__(self, grid_size=128, dx=1.0, masked=True):
+        super().__init__()
+        self.grid_size = int(grid_size)
+        self.dx = float(dx)
+        self.masked = bool(masked)
+        frequencies = 2.0 * torch.pi * torch.fft.fftfreq(
+            self.grid_size, d=self.dx
+        )
+        laplace_eigenvalue = -(
+            frequencies[:, None] ** 2 + frequencies[None, :] ** 2
+        )
+        self.register_buffer(
+            "laplace_eigenvalue",
+            laplace_eigenvalue[None, None],
+        )
+
+    def laplacian(self, field):
+        if field.shape[-2:] != (self.grid_size, self.grid_size):
+            raise ValueError(
+                f"Expected {self.grid_size}x{self.grid_size} fields, "
+                f"received {tuple(field.shape[-2:])}."
+            )
+        # The fields are constants with respect to network parameters, so no
+        # autograd graph is needed for their Fourier derivatives.
+        with torch.no_grad():
+            field_hat = torch.fft.fft2(field)
+            return torch.fft.ifft2(
+                self.laplace_eigenvalue * field_hat
+            ).real
+
+    def forward(self, u, v, params_real):
+        if params_real.shape[1] != 3:
+            raise ValueError(
+                "BrusselatorPhysicsLoss expects [A, B, d]."
+            )
+        A = params_real[:, 0].view(-1, 1, 1, 1)
+        B = params_real[:, 1].view(-1, 1, 1, 1)
+        d = params_real[:, 2].view(-1, 1, 1, 1)
+
+        lap_u = self.laplacian(u)
+        lap_v = self.laplacian(v)
+        u2v = u.square() * v
+        residual_u = lap_u + A - (B + 1.0) * u + u2v
+        residual_v = d * lap_v + B * u - u2v
+
+        if self.masked:
+            mask = (u > u.mean(dim=(2, 3), keepdim=True)).to(u.dtype)
+        else:
+            mask = torch.ones_like(u)
+        effective_pixels = mask.sum().clamp_min(1.0)
+        return (
+            (residual_u.square() + residual_v.square()) * mask
+        ).sum() / effective_pixels
+
+
+class SchnakenbergPhysicsLoss(nn.Module):
+    """Steady spectral PDE residual for three-parameter Schnakenberg data.
+
+    The generated data use
+
+        0 = Laplacian(u) + a - u + u^2 v
+        0 = d Laplacian(v) + b - u^2 v
+
+    with periodic boundaries, ``gamma=1`` and ``D_u=1``.
+    """
+
+    def __init__(self, grid_size=128, dx=1.0, masked=True):
+        super().__init__()
+        self.grid_size = int(grid_size)
+        self.dx = float(dx)
+        self.masked = bool(masked)
+        frequencies = 2.0 * torch.pi * torch.fft.fftfreq(
+            self.grid_size, d=self.dx
+        )
+        laplace_eigenvalue = -(
+            frequencies[:, None] ** 2 + frequencies[None, :] ** 2
+        )
+        self.register_buffer(
+            "laplace_eigenvalue",
+            laplace_eigenvalue[None, None],
+        )
+
+    def laplacian(self, field):
+        if field.shape[-2:] != (self.grid_size, self.grid_size):
+            raise ValueError(
+                f"Expected {self.grid_size}x{self.grid_size} fields, "
+                f"received {tuple(field.shape[-2:])}."
+            )
+        with torch.no_grad():
+            field_hat = torch.fft.fft2(field)
+            return torch.fft.ifft2(
+                self.laplace_eigenvalue * field_hat
+            ).real
+
+    def forward(self, u, v, params_real):
+        if params_real.shape[1] != 3:
+            raise ValueError(
+                "SchnakenbergPhysicsLoss expects [a, b, d]."
+            )
+        a = params_real[:, 0].view(-1, 1, 1, 1)
+        b = params_real[:, 1].view(-1, 1, 1, 1)
+        d = params_real[:, 2].view(-1, 1, 1, 1)
+
+        lap_u = self.laplacian(u)
+        lap_v = self.laplacian(v)
+        u2v = u.square() * v
+        residual_u = lap_u + a - u + u2v
+        residual_v = d * lap_v + b - u2v
+
+        if self.masked:
+            mask = (u > u.mean(dim=(2, 3), keepdim=True)).to(u.dtype)
+        else:
+            mask = torch.ones_like(u)
+        effective_pixels = mask.sum().clamp_min(1.0)
+        return (
+            (residual_u.square() + residual_v.square()) * mask
+        ).sum() / effective_pixels
+
+
+class LengyelEpsteinPhysicsLoss(nn.Module):
+    """Steady spectral residual for illuminated Lengyel--Epstein data.
+
+    The identifiable three-parameter form used by the generator is
+
+        0 = Laplacian(u) + a - u - 4uv/(1 + u^2) - phi
+        0 = r Laplacian(v) + u - uv/(1 + u^2) + phi
+
+    where ``r=d/b`` and the otherwise unidentifiable overall time scale of
+    the second equation is fixed.
+    """
+
+    def __init__(self, grid_size=128, dx=1.0, masked=True):
+        super().__init__()
+        self.grid_size = int(grid_size)
+        self.dx = float(dx)
+        self.masked = bool(masked)
+        frequencies = 2.0 * torch.pi * torch.fft.fftfreq(
+            self.grid_size, d=self.dx
+        )
+        laplace_eigenvalue = -(
+            frequencies[:, None] ** 2 + frequencies[None, :] ** 2
+        )
+        self.register_buffer(
+            "laplace_eigenvalue",
+            laplace_eigenvalue[None, None],
+        )
+
+    def laplacian(self, field):
+        if field.shape[-2:] != (self.grid_size, self.grid_size):
+            raise ValueError(
+                f"Expected {self.grid_size}x{self.grid_size} fields, "
+                f"received {tuple(field.shape[-2:])}."
+            )
+        with torch.no_grad():
+            field_hat = torch.fft.fft2(field)
+            return torch.fft.ifft2(
+                self.laplace_eigenvalue * field_hat
+            ).real
+
+    def forward(self, u, v, params_real):
+        if params_real.shape[1] != 3:
+            raise ValueError(
+                "LengyelEpsteinPhysicsLoss expects [a, phi, r]."
+            )
+        a = params_real[:, 0].view(-1, 1, 1, 1)
+        phi = params_real[:, 1].view(-1, 1, 1, 1)
+        r = params_real[:, 2].view(-1, 1, 1, 1)
+
+        lap_u = self.laplacian(u)
+        lap_v = self.laplacian(v)
+        rational = u * v / (1.0 + u.square())
+        residual_u = lap_u + a - u - 4.0 * rational - phi
+        residual_v = r * lap_v + u - rational + phi
+
+        if self.masked:
+            mask = (u > u.mean(dim=(2, 3), keepdim=True)).to(u.dtype)
+        else:
+            mask = torch.ones_like(u)
+        effective_pixels = mask.sum().clamp_min(1.0)
+        return (
+            (residual_u.square() + residual_v.square()) * mask
+        ).sum() / effective_pixels

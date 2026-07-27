@@ -1,49 +1,59 @@
-import gdown
-import os
+"""Download the fixed Gierer–Meinhardt train/validation/evaluation data."""
+
+from pathlib import Path
 import shutil
+import tempfile
 
-def download_dataset():
-    url = "https://drive.google.com/drive/folders/1kFGnLe4YJ6ddM5YCSfyXyZ86eCBLJb96?usp=sharing"
-    # Use a temporary folder to download the content first
-    temp_output = "temp_dataset_download"
+import gdown
 
-    if not os.path.exists(temp_output):
-        os.makedirs(temp_output)
-        print(f"Created temporary directory: {temp_output}")
-    
-    print(f"Downloading dataset folder from {url} to {temp_output}...")
-    # download_folder downloads the contents of the remote folder into the output directory
-    gdown.download_folder(url, output=temp_output, quiet=False, use_cookies=False)
-    print("Download complete.")
-    
-    print("Moving files to root directory...")
-    files_moved = 0
-    for item in os.listdir(temp_output):
-        source = os.path.join(temp_output, item)
-        destination = os.path.join(".", item)
-        
-        # Skip hidden files like .DS_Store if they exist
-        if item.startswith('.'):
-            continue
-            
-        print(f"Moving {item} to ./")
-        if os.path.exists(destination):
-            if os.path.isdir(destination):
-                shutil.rmtree(destination)
-            else:
-                os.remove(destination)
-        
-        shutil.move(source, destination)
-        files_moved += 1
 
-    print(f"Moved {files_moved} items to root directory.")
+URL = (
+    "https://drive.google.com/drive/folders/"
+    "1kFGnLe4YJ6ddM5YCSfyXyZ86eCBLJb96?usp=sharing"
+)
+OUTPUT_DIR = Path("gm_data")
+FILES = {
+    "train_data.npz": "gm_train_data.npz",
+    "val_data.npz": "gm_validation_data.npz",
+    "test_data.npz": "gm_eval_data.npz",
+}
 
-    # Clean up
+
+def download_dataset() -> None:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    existing = [
+        OUTPUT_DIR / destination
+        for destination in FILES.values()
+        if (OUTPUT_DIR / destination).exists()
+    ]
+    if existing:
+        names = ", ".join(str(path) for path in existing)
+        raise FileExistsError(
+            f"Refusing to overwrite existing GM data: {names}"
+        )
+
+    temporary = Path(
+        tempfile.mkdtemp(prefix=".gm_download_", dir=".")
+    )
     try:
-        os.rmdir(temp_output)
-        print(f"Removed temporary directory: {temp_output}")
-    except OSError:
-        print(f"Note: Temporary directory {temp_output} could not be removed (might not be empty).")
+        gdown.download_folder(
+            URL,
+            output=str(temporary),
+            quiet=False,
+            use_cookies=False,
+        )
+        for source_name, destination_name in FILES.items():
+            matches = list(temporary.rglob(source_name))
+            if len(matches) != 1:
+                raise FileNotFoundError(
+                    f"Expected one {source_name}, found {len(matches)}."
+                )
+            matches[0].replace(OUTPUT_DIR / destination_name)
+    finally:
+        shutil.rmtree(temporary)
+
+    print(f"GM dataset is ready in {OUTPUT_DIR}/")
+
 
 if __name__ == "__main__":
     download_dataset()
