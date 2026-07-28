@@ -1,0 +1,559 @@
+
+\documentclass{article} % For LaTeX2e
+\usepackage{iclr2026_conference,times}
+
+% Optional math commands from https://github.com/goodfeli/dlbook_notation.
+\input{math_commands.tex}
+
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{amsmath}
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{xcolor}         % colors
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{caption}
+\nocite{*}
+
+\title{PRESS: Physics-Regularized Parameter Estimation from Steady-State Turing Patterns}
+
+% Authors must not appear in the submitted version. They should be hidden
+% as long as the \iclrfinalcopy macro remains commented out below.
+% Non-anonymous submissions will be rejected without review.
+
+\author{
+  Zi-Yan Shi$^*$, Jaron Yeh$^*$, Chien-Yu Hung$^*$\\
+  Department of Engineering Science and Ocean Engineering, National Taiwan University\\
+  \texttt{pegasus2737@gmail.com}, 
+  \texttt{yeh.jaron@gmail.com}, 
+  \texttt{hunjasper9@gmail.com}\\
+  $^*$Equal contribution.
+}
+
+% The \author macro works with any number of authors. There are two commands
+% used to separate the names and addresses of multiple authors: \And and \AND.
+%
+% Using \And between authors leaves it to \LaTeX{} to determine where to break
+% the lines. Using \AND forces a linebreak at that point. So, if \LaTeX{}
+% puts 3 of 4 authors names on the first line, and the last on the second
+% line, try using \AND instead of \And before the third author name.
+
+\newcommand{\fix}{\marginpar{FIX}}
+\newcommand{\new}{\marginpar{NEW}}
+
+\iclrfinalcopy % Uncomment for camera-ready version, but NOT for submission.
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+The Turing mechanism explains how biological systems leverage spontaneous symmetry breaking within reaction-diffusion processes to generate complex spatial patterns. Despite the widespread recognition of this mechanism, accurately recovering the underlying control parameters solely from these static patterns remains a major bottleneck in inverse problem research. This study challenges this limitation by proposing \textbf{PRESS} (Physics-Regularized Estimation from Steady-State Turing Patterns), an efficient parameter discovery framework that integrates a novel steady-state physics-informed residual loss to constrain neural network architectures. Unlike traditional approaches that rely on temporal derivatives, our key contribution is a regularization strategy that leverages the equilibrium condition of reaction-diffusion systems, enabling robust inference directly from single snapshots. We systematically evaluate the impact of this physical constraint on both CNNs and Multilayer Perceptrons (MLPs) for the simultaneous inference of four governing parameters. Experimental results demonstrate that integrating the steady-state physics loss significantly enhances model performance. Crucially, PRESS is capable of accurately extracting parameters directly from raw pattern images, substantially outperforming unconstrained baseline models. Our findings confirm that steady-state physical laws serve as a potent regularization tool, providing an efficient, end-to-end, and physically consistent solution for quantifying Turing systems.
+\end{abstract}
+
+\section{Introduction}
+
+The spontaneous emergence of spatial patterns in nature---from zebra stripes to the arrangement of hair follicles---has fascinated scientists for decades. Since Alan Turing's seminal work in 1952 \cite{turing1952chemical}, reaction--diffusion systems have served as a foundational mathematical framework for understanding morphogenesis. While the \textit{forward problem}---generating patterns from known dynamical parameters---is now well understood through numerical simulation, the \textit{inverse problem} of inferring governing parameters solely from an observed, static pattern remains a formidable challenge. Solving this inverse problem is crucial for quantitatively characterizing biological models and uncovering the mechanistic principles underlying developmental processes.
+
+In practice, the inverse problem faces two major obstacles. First, biological experiments are costly and time-consuming, resulting in an acute scarcity of labeled data with known ground-truth parameters. Second, most experimental observations are static snapshots lacking temporal resolution. This poses a fundamental difficulty for standard physics-informed approaches, which typically rely on time-series data to compute temporal derivatives ($\partial u / \partial t$) for residual minimization. Without temporal information, traditional deep learning approaches fall back to purely data-driven mapping. However, existing literature---notably \cite{schnorr2023learning}---reports that convolutional neural networks (CNNs) perform poorly in such small-data regimes compared to kernel-based methods, suggesting that CNNs inherently require large datasets to extract meaningful representations from Turing patterns.
+
+In this work, we challenge this prevailing assumption by demonstrating that the perceived inefficacy of CNNs in small-data regimes is a result of insufficient regularization, rather than architectural limitations. We introduce \textbf{PRESS} (Physics-Regularized Estimation from Steady-State Turing Patterns), a framework that bridges the gap between data-driven learning and mathematical modeling. Instead of requiring temporal trajectories, PRESS leverages the steady-state equilibrium condition of reaction-diffusion systems (where reaction kinetics balance diffusion) as a physics-informed residual loss. This effectively constrains the hypothesis space of the neural network, allowing it to infer parameters that are not only visually consistent with the input pattern but also physically valid according to the governing Partial Differential Equations (PDEs).
+
+In summary, our main contributions are as follows:
+
+\begin{itemize}
+
+\item We formulate a steady-state physics-informed loss specifically designed for snapshot data, eliminating the need for temporal derivatives or time-series observations in parameter inference.
+
+\item We propose PRESS, a unified framework that integrates this physical regularization with convolutional architectures. We demonstrate that imposing steady-state PDE constraints significantly boosts parameter discovery performance in data-scarce regimes.
+
+\item We provide a systematic analysis of the interaction between physical regularization, dataset size, and network depth, confirming that physics-informed constraints effectively compensate for the lack of massive labeled datasets.
+
+\end{itemize}
+
+\section{Related Work}
+
+Recovering reaction–diffusion parameters from observed Turing patterns has been approached through four major methodological directions.
+
+\paragraph{Handcrafted Feature Methods.}
+A prominent line of work, exemplified by \cite{schnorr2023learning}, relies on geometric descriptors to summarize Turing pattern morphology. These hand-engineered features demonstrate that steady-state patterns inherently contain recoverable information about underlying parameters. However, they depend heavily on manual design choices and often generalize poorly across different pattern regimes or stochastic initial conditions. In contrast, our method operates end-to-end on raw images, extracting physically meaningful representations without requiring manually crafted preprocessing or domain-specific feature construction.
+
+\paragraph{Data-Driven CNN Approaches.}
+The comparative study by \cite{schnorr2023learning} also investigated convolutional neural networks as a data-driven alternative, though their experiments were limited to single-parameter estimation. Subsequent research has expanded this scope; for instance, \cite{shin2026exploring} demonstrated the potential of CNNs in classifying spatial heterogeneities, while \cite{scholz2022exploring} utilized CNNs to efficiently scan high-dimensional parameter spaces for complex morphologies. Furthermore, \cite{li2020reaction} developed an encoder-decoder CNN to directly predict concentration distributions, bypassing expensive numerical simulations. While these models successfully exploit local spatial structure, their predictions lack explicit enforcement of the governing PDEs. This absence of physical regularization often leads to limited consistency and reduced robustness in low-data settings, a limitation we address by directly embedding the steady-state equilibrium condition into the loss landscape.
+
+\paragraph{Physics-Constrained Convolutional Architectures.}
+Integrating CNNs with physical constraints has become a dominant paradigm for solving PDEs on grid-structured domains. Existing literature extensively utilizes PI-CNNs as efficient surrogate models for \textit{forward problems}—mapping known parameters to solution fields. Applications range from spatiotemporal dynamics in reaction-diffusion systems \cite{yuan2024fpicnn} and transient Darcy flows \cite{zhang2022pidcnn}, to electromagnetic simulations \cite{emekci2024physics} and steady-state thermal field prediction \cite{zhao2023physics}. To enhance learning under data scarcity, \cite{rao2023encoding} proposed a framework unifying measurement data with PDE priors to learn spatiotemporal evolution. A unifying theme is the use of discretized residual losses (e.g., Finite Difference) computed via fixed convolutional kernels. While some studies have extended this to real-time optimization \cite{Ge2024microgrid} and state estimation \cite{kelshaw2024inverse}, a critical distinction exists between reconstructing a physical field (\textit{state estimation}) and inferring governing coefficients (\textit{parameter discovery}). Standard approaches for the latter typically rely on computationally expensive per-instance optimization, lacking a framework designed specifically for amortized parameter inference from static snapshots.
+
+\paragraph{Physics-Informed Optimization Methods.}
+Physics-Informed Neural Networks (PINNs) and PDE-constrained optimization approaches incorporate reaction–diffusion equations directly into the learning objective. PINNs have shown strong performance in forward simulation for classical Turing models \cite{hariri2025physics}. Extensions to inverse problems, such as the formulation by \cite{kho2022design}, jointly optimize parameters and network weights to satisfy steady-state PDE constraints. However, these approaches function as \textit{per-instance solvers}: they require solving a full optimization problem for each individual observed pattern, leading to substantial computational costs. RBF-enhanced PINN variants \cite{matasgil2024unraveling} share this limitation. Unlike these optimization-based methods, our approach learns a generalized mapping function, allowing for instant inference on new data without re-training.
+
+\paragraph{Positioning of PRESS.}
+Our framework, PRESS, bridges these paradigms to address the steady-state inverse problem. Unlike handcrafted descriptors, PRESS requires no manual feature engineering.
+Unlike purely data-driven CNNs, it enforces explicit physical consistency through PDE residuals. Unlike classical PINN-based inverse solvers which perform per-instance optimization, PRESS amortizes the inference cost by training a unified encoder. Crucially, unlike methods requiring time-series data to compute temporal derivatives, we formulate a physics loss specifically derived from the \textit{steady-state equilibrium} of the reaction-diffusion system. The result is a lightweight, physically regularized method that achieves efficient, end-to-end parameter inference.
+
+\section{Methodology}
+\label{headings}
+
+\subsection{The Challenge of Static Snapshot Data}
+A primary obstacle in quantifying reaction--diffusion systems is the reliance on static experimental observations. Unlike time-series data where temporal derivatives ($\partial u / \partial t$) can be directly approximated to guide physics-informed learning, biological experiments often yield only \textit{steady-state snapshots}—single images of the final pattern.
+Furthermore, large-scale public datasets containing Turing patterns paired with their ground-truth kinetic parameters are virtually non-existent, and generating such labeled data via wet-lab experiments is cost-prohibitive. To overcome these bottlenecks, we employ a physics-based synthetic data generation strategy to construct a comprehensive dataset for training our PRESS framework.
+
+\subsection{Data Generation and Numerical Simulation}
+
+To construct a high-fidelity dataset of Turing patterns for supervised learning, we implement a numerical pipeline based on the Gierer--Meinhardt reaction--diffusion model. Our mathematical formulation and numerical integration follow the framework of \cite{schnorr2023learning}, ensuring consistency with established theoretical benchmarks.
+
+\subsubsection{Mathematical Formulation}
+
+\paragraph{The Gierer-Meinhardt Model}\cite{gierer1972theory}
+The dynamics of the activator concentration $u(\vect{x}, t)$ and inhibitor concentration $v(\vect{x}, t)$ are governed by the following system of coupled reaction-diffusion equations on a two-dimensional domain $\Omega$:
+\begin{align}
+    \frac{\partial u}{\partial t} &= D_u \nabla^2 u + \rho \left( \frac{u^2}{v(1 + \kappa u^2)} - \mu_u u \right) + \rho_u \label{eq:gm_u} \\
+    \frac{\partial v}{\partial t} &= D_v \nabla^2 v + \rho \left( u^2 - \mu_v v \right) + \rho_v \label{eq:gm_v}
+\end{align}
+where $D_u$ and $D_v$ denote the diffusion coefficients for the activator and inhibitor, respectively. The reaction terms include a source production rate $\rho$, decay rates $\mu_u$ and $\mu_v$, and basic production terms $\rho_u$ and $\rho_v$. The saturation constant $\kappa$ regulates the activator's autocatalytic growth.
+
+\paragraph{Dimensionless Formulation}
+
+Following the non-dimensionalization procedure described in \cite{murray1982parameter}, we rescale the system to reduce the parameter space to four key dimensionless quantities: the decay rate of the activator $a$, the basic production rate of the activator $b$, the saturation constant $c$, and the ratio of diffusion coefficients $\delta$. A global scaling parameter $s$ is also introduced to control the effective diffusion magnitude.
+
+The resulting dimensionless system is given by:
+\begin{align}
+    \frac{\partial u}{\partial t} &= s \Delta u + \frac{u^2}{v(1 + c u^2)} - a u + b \label{eq:dimless_u} \\
+    \frac{\partial v}{\partial t} &= s \delta \Delta v + u^2 - v \label{eq:dimless_v}
+\end{align}
+where $\Delta = \nabla^2$ represents the Laplacian operator. In this formulation:
+\begin{itemize}
+    \item $s$ is the fixed baseline diffusion coefficient.
+    \item $\delta = D_v / D_u$ represents the relative diffusion scale of the inhibitor.
+    \item The parameter set $\theta = \{a, b, c, \delta\}$ fully determines the pattern selection regime.
+\end{itemize}
+
+\subsubsection{Numerical Implementation}
+
+\paragraph{Parameter Space Sampling and Stability Filtering}
+To generate a diverse dataset, we sample the kinetic parameters $(a, b, c)$ and the diffusion ratio $\delta$ uniformly from the empirical ranges defined in \cite{schnorr2023learning}, as summarized in Table~\ref{tab:param_ranges}.
+
+Since not all parameter combinations lead to stable Turing patterns, we apply a linear stability analysis (LSA) filter prior to simulation. For each parameter set $\theta$, we compute the homogeneous steady state $(u^*, v^*)$ and verify the Turing instability conditions (existence of positive steady states, stability to homogeneous perturbations, and instability to spatial perturbations). This filtering process ensures that computational resources are focused solely on pattern-forming regimes.
+
+\begin{table}[h]
+\centering
+\caption{Parameter ranges for data generation, adopted from \cite{schnorr2023learning}.}
+\label{tab:param_ranges}
+\vspace{0.5cm}
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Parameter} & \textbf{Symbol} & \textbf{Range} \\ 
+\hline
+Decay rate of activator & $a$ & $[0.01, 0.7]$ \\
+Basic production of activator & $b$ & $[0.4, 2.0]$ \\
+Saturation constant & $c$ & $[0.02, 7.0]$ \\
+Diffusion scale factor & $\delta$ & $[20.0, 200.0]$ \\ 
+\hline
+\end{tabular}
+\end{table}
+
+\paragraph{Spectral Numerical Simulation}
+
+We solve the system under periodic boundary conditions using a semi-implicit spectral method, as utilized in \cite{schnorr2023learning}. This approach employs the Fast Fourier Transform (FFT) to diagonalize the Laplacian operator, treating the stiff diffusion terms implicitly in the frequency domain while evaluating the nonlinear reaction terms explicitly in the spatial domain.
+
+Let $\hat{u}^{(n)}_{\vect{k}}$ and $\hat{v}^{(n)}_{\vect{k}}$ denote the Fourier coefficients of $u$ and $v$ at time step $n$ for wave vector $\vect{k}$. The explicit update rules used in our implementation are:
+
+\begin{align}
+    \hat{u}^{(n+1)}_{\vect{k}} &= \frac{\hat{u}^{(n)}_{\vect{k}} + \Delta t \cdot \F \left[ f_u(u^{(n)}, v^{(n)}) \right]_{\vect{k}}}{1 + \Delta t \cdot s \cdot |\vect{k}|^2} \label{eq:spectral_update_u} \\[1em]
+    \hat{v}^{(n+1)}_{\vect{k}} &= \frac{\hat{v}^{(n)}_{\vect{k}} + \Delta t \cdot \F \left[ f_v(u^{(n)}, v^{(n)}) \right]_{\vect{k}}}{1 + \Delta t \cdot s \cdot \delta \cdot |\vect{k}|^2} \label{eq:spectral_update_v}
+\end{align}
+
+where $\F[\cdot]$ represents the FFT operator, and the nonlinear reaction terms are given by $f_u = \frac{u^2}{v(1 + c u^2)} - a u + b$ and $f_v = u^2 - v$.
+
+\paragraph{Implementation Details}
+
+The simulation was implemented using CuPy for GPU acceleration. The spatial domain was discretized into a $128 \times 128$ grid. Time integration was performed with a step size $\Delta t = 0.2$ for a total of $T_{max} = 5000$ units. Initial conditions were set to the homogeneous steady state $(u^*, v^*)$ with additive Gaussian noise ($\sigma=0.001$) to induce symmetry breaking. The final dataset consists of 20,000 simulation samples, stratified into training, validation, and testing sets. Examples of the generated Turing patterns are shown in Figure \ref{fig:turing_example} in the appendix.
+
+\subsection{Steady-State Physics Regularization}
+
+The core of the PRESS framework is the enforcement of the steady-state equilibrium condition as a regularization term. Instead of requiring temporal trajectories to compute time derivatives, we derive a residual loss directly from the stationary form of the governing reaction--diffusion equations. This constrains the neural network to predict parameters that satisfy the delicate balance between reaction kinetics and diffusion.
+
+\subsubsection{Residual Formulation}
+Let $\hat{\theta} = \{\hat{a}, \hat{b}, \hat{c}, \hat{\delta}\}$ be the parameters predicted by the neural network given an input pattern $(\vect{u}, \vect{v})$. We define the physical residuals $\mathcal{R}_u$ and $\mathcal{R}_v$ based on the dimensionless Gierer-Meinhardt model (Eqs. \ref{eq:dimless_u}-\ref{eq:dimless_v}) at steady state (i.e., $\frac{\partial u}{\partial t} \approx 0, \frac{\partial v}{\partial t} \approx 0$).
+
+The residuals at each spatial location $\vect{x}_{i,j}$ are given by:
+\begin{align}
+    \mathcal{R}_u(\vect{x}_{i,j}) &= s \Delta \vect{u}_{i,j} + \frac{\vect{u}_{i,j}^2}{\vect{v}_{i,j}(1 + \hat{c} \vect{u}_{i,j}^2)} - \hat{a} \vect{u}_{i,j} + \hat{b} \\
+    \mathcal{R}_v(\vect{x}_{i,j}) &= s \hat{\delta} \Delta \vect{v}_{i,j} + \vect{u}_{i,j}^2 - \vect{v}_{i,j}
+\end{align}
+where $s=0.4$ is the fixed diffusion scaling parameter. Ideally, for ground-truth parameters, the system should be at equilibrium, driving these residuals to zero.
+
+\subsubsection{Numerical Approximation via Convolution}
+To efficiently compute the Laplacian term $\Delta$ within the neural network's computational graph, we employ a finite difference approximation implemented as a fixed convolutional layer. Specifically, we utilize the standard five-point stencil kernel $K_{lap}$:
+\begin{equation}
+    K_{lap} = \begin{bmatrix} 
+    0 & 1 & 0 \\ 
+    1 & -4 & 1 \\ 
+    0 & 1 & 0 
+    \end{bmatrix} 
+\end{equation}
+The Laplacian of the concentration field $\vect{u}$ is computed as:
+\begin{equation}
+    \Delta \vect{u} \approx \frac{1}{(\Delta x)^2} (K_{lap} \ast \vect{u})
+\end{equation}
+where $\ast$ denotes the convolution operation. To maintain consistency with the data generation process, we apply circular padding to the input feature maps prior to convolution, thereby enforcing periodic boundary conditions.
+
+The final physics-regularized objective $\mathcal{L}_{phy}$ utilized in PRESS is computed as the mean squared residual over the spatial domain:
+\begin{equation}
+    \mathcal{L}_{phy} = \frac{1}{N} \sum_{i,j} \left( \mathcal{R}_u(\vect{x}_{i,j})^2 + \mathcal{R}_v(\vect{x}_{i,j})^2 \right)
+    \label{eq:lphy}
+\end{equation}
+where $N = 128 \times 128$ is the number of pixels in the grid.
+
+\subsubsection{Total Training Objective}
+
+The complete training objective of PRESS combines the supervised data loss with the steady-state physics regularization term. Given the predicted parameters $\hat{\theta} = \{\hat{a}, \hat{b}, \hat{c}, \hat{\delta}\}$ and the normalized ground-truth parameters $\theta$, the total loss is defined as:
+
+\begin{equation}
+    \mathcal{L}_{\text{total}} = \mathcal{L}_{\text{data}} + \lambda_{\text{phy}} \cdot \mathcal{L}_{\text{phy}}
+\end{equation}
+
+where $\mathcal{L}_{\text{data}} = \|\hat{\theta} - \theta\|^2$ is the mean squared error between predicted and ground-truth parameters in the normalized space, $\mathcal{L}_{\text{phy}}$ is the steady-state PDE residual defined in Eq.~(\ref{eq:lphy}), and $\lambda_{\text{phy}} \geq 0$ is a weighting hyperparameter that controls the trade-off between data fidelity and physical consistency. A larger $\lambda_{\text{phy}}$ enforces stricter adherence to the governing equations at the cost of potentially degrading parameter accuracy, as analyzed in Appendix~\ref{sec:sensitivity}.
+
+\subsection{Architecture Implementation}
+
+The PRESS framework is architecture-agnostic and can be integrated into various backbone networks. To systematically evaluate the impact of network depth and spatial feature extraction strategies on parameter estimation, we implement the framework on a series of convolutional neural network architectures with varying depths (1, 2, and 4 layers). Specifically, we compare two distinct spatial sampling mechanisms to encode the Turing patterns: \textit{Maxpooling} and \textit{Dilated Convolution}.
+
+In all configurations, circular padding is employed to align with the periodic boundary conditions inherent in Turing patterns. For architectures utilizing maxpooling, the model aggregates features through spatial downsampling to extract macro-structural information. Conversely, in the dilated convolution models, the dilation rate increases exponentially with layer depth. This allows the model to effectively expand its receptive field to a global scale without compromising spatial resolution—a critical feature for accurately computing the finite-difference Laplacian in the physics loss.
+
+The final extracted features are processed through two fully connected layers to regress the predicted parameters $\hat{\theta}$. By comparing these architectures, we assess whether spatial abstraction (pooling) or high-resolution geometric preservation (dilation) is more effective when constrained by the PRESS regularization.
+
+\section{Experiments}
+
+\label{sec:experiments}
+
+In this section, we evaluate the effectiveness of the proposed PRESS framework for parameter estimation. We systematically compare the performance of different neural network architectures (CNN vs. MLP) and investigate the impact of the steady-state physics regularization across various dataset sizes.
+
+\subsection{Experimental Setup}
+
+\subsubsection{Dataset and Preprocessing}
+
+The dataset consists of 20,000 successful simulation instances generated via the spectral numerical pipeline (Section 3), ensuring all samples exhibit valid Turing patterns. The data is partitioned as follows:
+
+\begin{itemize}
+
+\item \textbf{Training and Validation Sets}: A pool of up to 16,000 samples, partitioned with a 3:1 ratio (75\% training, 25\% validation). To evaluate data efficiency, models were trained on subsets of sizes $N_{train+val} \in \{2000, 4000, 8000, 16000\}$.
+
+\item \textbf{Test Set}: A dedicated hold-out set of 4,000 samples reserved for final performance evaluation.
+
+\end{itemize}
+
+\subsubsection{Data Normalization}
+
+The governing parameters $\theta = \{a, b, c, \delta\}$ span disparate physical scales (e.g., $a \sim 10^{-2}$ vs. $\delta \sim 10^2$). To ensure numerical stability and prevent gradient dominance by larger-magnitude parameters, we apply Min-Max normalization to map each parameter $y^{(j)}$ into the unit interval $[0, 1]$, where the bounds are defined in Table~\ref{tab:param_ranges}. All subsequent loss computations and evaluation metrics are performed in this normalized space to ensure equal weighting across all physical dimensions.
+
+\subsubsection{Evaluation Metrics}
+We evaluate performance using two metrics: (i) \textbf{Normalized Root Mean Square Error (NRMSE)} for parameter accuracy, and (ii) \textbf{Mean PDE Residual ($\mathcal{R}_{avg}$)}, calculated as the average pixel-wise squared residual of the governing equations (Eq. 11) over the test set. While NRMSE measures ground-truth alignment, $\mathcal{R}_{avg}$ quantifies the physical consistency of the predicted parameters. To measure the efficacy of PRESS, we report the percentage improvement ($\text{Imp.}$) in these metrics compared to the data-driven baseline.
+
+\subsubsection{Training Configuration}
+
+Both the purely data-driven baselines and the PRESS-regularized models are trained under the same set of hyperparameters to ensure a fair comparison. Models are trained for 100 epochs (batch size 32) using Adam ($lr=10^{-3}$) with a two-stage schedule: a 10\% linear warm-up ($10^{-6}$ to $10^{-3}$) followed by cosine annealing. Random seeds are fixed across all experiments for reproducibility. No additional weight decay or parameter-level smoothing are used.
+
+For the baseline supervised training, the loss consists solely of the mean squared error (MSE) between predicted and normalized target parameters. For PRESS training, the steady-state PDE residual loss derived from the Gierer–Meinhardt equations is added to the MSE, weighted by $\lambda_{\text{phy}} = 10^{-n}$, where $n \in \{1, 2, 3, 4, 5\}$.
+
+\subsubsection{MLP Comparison}
+
+In addition, we construct a multilayer perceptron (MLP) as a non-convolutional baseline. Instead of using convolutional operations that preserve spatial topology, the MLP flattens the input Turing pattern image into a one-dimensional vector and processes it through several fully connected layers to regress the four normalized system parameters. Since this architecture does not preserve local spatial neighborhood information, it serves as a reference point for evaluating the model's inference capability \emph{without} exploiting local pattern structures. This comparison allows us to verify whether the performance gains are driven by the PRESS framework's ability to leverage spatial derivatives (Laplacians) within the CNN architecture.
+
+\subsection{Results and Discussion}
+
+\subsubsection{Impact of Steady-State Physics Regularization}
+
+We evaluate the effect of the proposed \textbf{PRESS} framework across a wide range of CNN architectures, varying both network depth ($L$) and spatial operations, as summarized in Table~\ref{tab:comprehensive_results}. The results consistently demonstrate that incorporating steady-state physical constraints improves parameter inference accuracy across most architectural and data regimes, though the magnitude of improvement depends strongly on model capacity and dataset size.
+
+\begin{table}[ht]
+\centering
+\footnotesize
+%\setlength{\tabcolsep}{3.5pt} % 微調欄寬以容納新欄位
+\caption{Comprehensive performance comparison. We report NRMSE (parameter error) and PDE Residual (physical inconsistency). PRESS consistently reduces the physical residual (positive Imp.), confirming adherence to governing laws even when NRMSE gains saturate. $\lambda_{phy}$ denotes the optimal physical loss weight.}
+\label{tab:comprehensive_results}
+\vspace{0.3cm}
+\begin{tabular}{cccccccccc}
+\toprule
+\textbf{Depth} & \textbf{Spatial} & \multirow{2}{*}{\textbf{Size}} & \multicolumn{3}{c}{\textbf{NRMSE $\downarrow$}} & \multicolumn{3}{c}{\textbf{PDE Residual $\downarrow$}} & \multirow{2}{*}{\textbf{$\lambda_{phy}$}} \\
+\cmidrule(lr){4-6} \cmidrule(lr){7-9}
+\textbf{($L$)} & \textbf{Op.} & & \textbf{Base} & \textbf{PRESS} & \textbf{Imp.} & \textbf{Base} & \textbf{PRESS} & \textbf{Imp.} & \\
+\midrule
+\multirow{4}{*}{$L=1$} & \multirow{4}{*}{None}
+  & 2000  & 0.2178 & \textbf{0.1868} & +14.23 & 0.8276 & \textbf{0.3595} & +56.56 & 0.1 \\
+& & 4000  & 0.1826 & \textbf{0.1526} & +16.42 & 0.5141 & \textbf{0.2394} & +53.43 & 0.1 \\
+& & 8000  & 0.1616 & \textbf{0.1243} & +23.08 & 0.3894 & \textbf{0.1627} & +58.23 & 0.1 \\
+& & 16000 & 0.1445 & \textbf{0.1119} & +22.61 & 0.2545 & \textbf{0.1626} & +36.11 & 0.1 \\
+\midrule
+\multirow{8}{*}{$L=2$} & \multirow{4}{*}{Dilated}
+  & 2000  & 0.1713 & \textbf{0.1409} & +17.77 & 0.4459 & \textbf{0.0612} & +86.28 & 0.1 \\
+& & 4000  & 0.1545 & \textbf{0.1080} & +30.08 & 0.3552 & \textbf{0.0784} & +77.93 & 0.1 \\
+& & 8000  & 0.1222 & \textbf{0.0811} & +33.61 & 0.3708 & \textbf{0.0740} & +80.04 & 0.1 \\
+& & 16000 & 0.1172 & \textbf{0.1170} & +0.17  & 0.1065 & \textbf{0.1010} & +5.14  & 0.00001 \\
+\cmidrule(lr){2-10}
+& \multirow{4}{*}{Maxpool}
+  & 2000  & 0.1421 & \textbf{0.0879} & +38.17 & 0.4578 & \textbf{0.1568} & +65.74 & 0.1 \\
+& & 4000  & 0.1253 & \textbf{0.0847} & +32.46 & 0.3563 & \textbf{0.1246} & +49.12 & 0.001 \\
+& & 8000  & 0.0645 & \textbf{0.0541} & +16.16 & 0.1343 & \textbf{0.0827} & +61.17 & 0.01 \\
+& & 16000 & 0.0497 & \textbf{0.0492} & +1.00  & 0.1032 & \textbf{0.1014} & +1.82  & 0.0001 \\
+\midrule
+\multirow{8}{*}{$L=4$} & \multirow{4}{*}{Dilated}
+  & 2000  & 0.1059 & \textbf{0.0777} & +26.63 & 0.2312 & \textbf{0.1261} & +45.46 & 0.1 \\
+& & 4000  & 0.0952 & \textbf{0.0692} & +27.28 & 0.1802 & \textbf{0.0871} & +51.71 & 0.1 \\
+& & 8000  & 0.1299 & \textbf{0.0507} & +60.97 & 0.5369 & \textbf{0.0440} & +91.81 & 0.1 \\
+& & 16000 & 0.0538 & \textbf{0.0455} & +15.51 & 0.1013 & \textbf{0.0434} & +57.16 & 0.1 \\
+\cmidrule(lr){2-10}
+& \multirow{4}{*}{Maxpool}
+  & 2000  & 0.1121 & \textbf{0.1100} & +1.83  & 0.2804 & \textbf{0.1741} & +37.91 & 0.01 \\
+& & 4000  & 0.0735 & \textbf{0.0702} & +4.47  & 0.1481 & \textbf{0.1429} & +3.51  & 0.001 \\
+& & 8000  & 0.0466 & \textbf{0.0379} & +18.54 & 0.0496 & \textbf{0.0184} & +62.97 & 0.001 \\
+& & 16000 & \textbf{0.0303} & 0.0319 & -5.24  & 0.0182 & \textbf{0.0181} & +0.27  & 0.001 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Impact of Physics-Informed Loss Across Data Scales.}
+
+We first evaluate the baseline single-layer architecture ($L=1$, none) to establish the foundational impact of physical constraints. As summarized in Table~\ref{tab:comprehensive_results}, the PRESS-regularized model consistently outperforms the purely data-driven baseline across all evaluated dataset sizes. The physical constraint acts as a robust regularizer, particularly in the low-data regime; at 2,000 samples,  PRESS achieves an NRMSE of 0.1868, marking a 14.23\% improvement. Crucially, it yields a massive 56.56\% reduction in PDE residual ($0.8276 \to 0.3595$), demonstrating that the model successfully internalizes the reaction-diffusion dynamics even when data is scarce. This trend persists as the data scale increases to 8,000 samples, where the improvement peaks at 23.08\%. These results demonstrate that steady-state physics regularization effectively guides the network to internalize the underlying reaction-diffusion dynamics even when supervision is relatively scarce.
+
+\paragraph{Influence of Architecture Depth and Model Capacity.}
+
+Our experiments reveal that the advantages of PRESS scale proportionally with network complexity ($L=2$ and $L=4$). A remarkable performance leap is observed in the $L=4$ dilated convolution setting: at 8,000 samples, PRESS reduces the NRMSE from 0.1299 to 0.0507, representing a substantial 60.97\% improvement. This suggests that as the hypothesis space expands with depth, the physical loss becomes increasingly critical in penalizing non-physical solutions that a deep baseline might otherwise overfit. By enforcing the Gierer–Meinhardt equations, PRESS effectively "prunes" the learning space, ensuring that high-capacity models remain grounded in the governing physics.
+
+\paragraph{Behavior in High-Data Regimes.}
+
+While PRESS yields significant gains in low- and intermediate-data regimes, we observe diminishing returns at 16,000 samples. The purely data-driven signal becomes strong enough for high-capacity models to approximate the solution manifold. 
+For instance, in the $L=4$ Maxpool configuration at 16k samples, the PRESS model exhibits a slightly higher NRMSE ($0.0319$) compared to the baseline ($0.0303$). However, the PDE Residual still decreases ($0.0182 \to 0.0181$, +0.27\%). This confirms that PRESS regularization successfully minimized the physical error as intended, even when numerical approximation biases prevent further NRMSE gains. Similarly, for the $L=2$ Dilated model at 16k samples, while NRMSE improvement is negligible ($+0.17\%$), the PDE Residual improves significantly ($0.1065 \to 0.1010$, a $+5.14\%$ reduction). This indicates that even when parameter gains saturate, PRESS continues to enforce better physical consistency.
+
+\subsubsection{Architecture Comparison: MLP vs. CNN}
+
+To examine the impact of spatial inductive bias on inverse parameter inference, we compare a Multi-Layer Perceptron (MLP), which operates on flattened inputs, with the aforementioned single-layer convolutional model that preserves local spatial structure. Results across all dataset sizes are summarized in Table~\ref{tab:mlp_vs_cnn}.
+
+\begin{table}[ht]
+\centering
+\footnotesize
+%\setlength{\tabcolsep}{4pt}
+\caption{Comparison between MLP and single-layer CNN ($L=1$). While MLP shows limited improvement, CNN achieves significantly higher residual reduction (Imp.), demonstrating superior physical consistency.}
+\label{tab:mlp_vs_cnn}
+\vspace{0.3cm}
+\begin{tabular}{ccccccccc}
+\toprule
+\textbf{Model} & \textbf{Size} &
+\multicolumn{3}{c}{\textbf{NRMSE $\downarrow$}} &
+\multicolumn{3}{c}{\textbf{PDE Residual $\downarrow$}} &
+\textbf{$\lambda_{phy}$} \\
+\cmidrule(lr){3-5} \cmidrule(lr){6-8}
+ & & \textbf{Base} & \textbf{PRESS} & \textbf{Imp.} & \textbf{Base} & \textbf{PRESS} & \textbf{Imp.} & \\
+\midrule
+\multirow{4}{*}{MLP}
+  & 2000  & 0.2096 & \textbf{0.2049} & +2.26  & 0.5448 & \textbf{0.4432} & +18.66 & 0.1 \\
+& 4000  & 0.1919 & \textbf{0.1824} & +4.98  & 0.4338 & \textbf{0.3448} & +20.52 & 0.1 \\
+& 8000  & 0.1767 & \textbf{0.1745} & +1.25  & 0.3824 & \textbf{0.3293} & +13.89 & 0.00001 \\
+& 16000 & 0.1683 & \textbf{0.1674} & +0.52  & 0.3211 & \textbf{0.2801} & +12.77 & 0.00001 \\
+\midrule
+\multirow{4}{*}{CNN ($L=1$)}
+  & 2000  & 0.2178 & \textbf{0.1868} & +14.23 & 0.8276 & \textbf{0.3595} & +56.56 & 0.1 \\
+& 4000  & 0.1826 & \textbf{0.1526} & +16.42 & 0.5141 & \textbf{0.2394} & +53.43 & 0.1 \\
+& 8000  & 0.1616 & \textbf{0.1243} & +23.08 & 0.3894 & \textbf{0.1627} & +58.23 & 0.1 \\
+& 16000 & 0.1445 & \textbf{0.1119} & +22.61 & 0.2545 & \textbf{0.1626} & +36.11 & 0.1 \\
+\bottomrule
+\end{tabular}%
+\end{table}
+
+Across all data regimes, the MLP exhibits stable behavior but benefits only marginally from the PRESS framework, with NRMSE reductions limited to $+0.52\%$–$+4.98\%$. This indicates that, without spatial inductive bias, physical constraints alone provide limited improvement for fully connected architectures.
+
+In contrast, the single-layer CNN responds strongly to the steady-state physics loss. Although the unconstrained CNN is comparable to or slightly worse than the MLP in the low-data regime (e.g., 2,000 samples), incorporating physics constraints yields substantial improvements, outperforming both baseline and physics-informed MLPs. This advantage also holds for other data sizes.
+
+Overall, these results demonstrate that the efficacy of PRESS is strongly architecture-dependent: MLPs show limited sensitivity to physical constraints, whereas CNNs leverage them to unlock spatial inductive bias, resulting in substantially larger performance gains in inverse parameter inference.
+
+\section{Conclusion}
+
+In this work, we revisited the inverse problem of recovering reaction--diffusion parameters from static Turing patterns through the lens of physics-informed deep learning. Focusing on the Gierer--Meinhardt model, we constructed a synthetic dataset of steady-state patterns and demonstrated that convolutional neural networks can reliably infer governing parameters directly from raw snapshot images when constrained by the PRESS framework.
+
+Our experiments reveal that incorporating steady-state physics regularization fundamentally enhances the accuracy and robustness of inference, with the most significant gains observed in low- and intermediate-data regimes. By explicitly enforcing the equilibrium condition of the reaction-diffusion system, PRESS leverages both local spatial derivatives and global dynamical constraints, significantly outperforming baselines that lack this physical grounding. These findings suggest that the previously reported limitations of CNNs for inverse Turing problems stem not from intrinsic architectural flaws, but from the absence of suitable physical regularization for snapshot data. By combining a convolutional encoder with a steady-state residual loss, our framework achieves efficient, end-to-end parameter inference without computationally expensive per-instance optimization, providing a scalable and physically consistent tool for quantitatively analyzing pattern-forming systems.
+
+\bibliography{iclr2026_conference}
+\bibliographystyle{iclr2026_conference}
+
+\appendix
+\section{Appendix}
+
+
+\begin{figure}[!ht]
+    \centering
+    \captionsetup[subfigure]{justification=raggedright, singlelinecheck=false}
+    
+    % --- 第一排 (3張) ---
+    % 寬度從 0.28 放大到 0.325 (這幾乎是極限了，再大會爆行)
+    \begin{subfigure}[b]{0.325\textwidth}
+        \centering
+        \includegraphics[width=\textwidth, trim=0 40 0 40, clip]{id1.png}
+        \vspace{-0.3cm}
+        \caption{
+            \begin{tabular}[t]{@{}l@{\hspace{0.3cm}}l@{}}
+               $a = 0.034$ & $b = 1.43$ \\
+               $c = 1.47$  & $\delta = 118.27$
+            \end{tabular}
+        }
+    \end{subfigure}
+    \hfill % 自動推擠，因為圖片變大，剩下的縫隙會變很小
+    \begin{subfigure}[b]{0.325\textwidth}
+        \centering
+        \includegraphics[width=\textwidth, trim=0 40 0 40, clip]{id6.png}
+        \vspace{-0.4cm}
+        \caption{
+            \begin{tabular}[t]{@{}l@{\hspace{0.3cm}}l@{}}
+               $a = 0.066$ & $b = 1.77$ \\
+               $c = 2.13$  & $\delta = 98.59$
+            \end{tabular}
+        }
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.325\textwidth}
+        \centering
+        \includegraphics[width=\textwidth, trim=0 40 0 40, clip]{id8.png}
+        \vspace{-0.4cm}
+        \caption{
+            \begin{tabular}[t]{@{}l@{\hspace{0.3cm}}l@{}}
+               $a = 0.108$ & $b = 1.07$ \\
+               $c = 0.56$  & $\delta = 76.74$
+            \end{tabular}
+        }
+    \end{subfigure}
+    
+    % --- 縮小兩排之間的距離 ---
+    \vspace{0.1cm} 
+    
+    % --- 第二排 (2張) ---
+    \begin{subfigure}[b]{0.325\textwidth}
+        \centering
+        \includegraphics[width=\textwidth, trim=0 40 0 40, clip]{id17.png}
+        \vspace{-0.4cm}
+        \caption{
+            \begin{tabular}[t]{@{}l@{\hspace{0.3cm}}l@{}}
+               $a = 0.030$ & $b = 1.91$ \\
+               $c = 1.44$  & $\delta = 115.81$
+            \end{tabular}
+        }
+    \end{subfigure}
+    \hspace{0.2cm} % 強制縮小第二排兩張圖的中間距離
+    \begin{subfigure}[b]{0.325\textwidth}
+        \centering
+        \includegraphics[width=\textwidth, trim=0 40 0 40, clip]{id50.png}
+        \vspace{-0.4cm}
+        \caption{
+            \begin{tabular}[t]{@{}l@{\hspace{0.3cm}}l@{}}
+               $a = 0.316$ & $b = 1.78$ \\
+               $c = 0.21$  & $\delta = 175.70$
+            \end{tabular}
+        }
+    \end{subfigure}
+    
+    % --- 縮小主標題與圖片的距離 ---
+    \vspace{-0.1cm}
+    \captionsetup{justification=centering}
+    \caption{Examples of Turing patterns generated on a $128 \times 128$ spatial grid. These examples illustrate the diverse morphologies inherent to the system, including isolated spots and labyrinthine structures, emerging from variations in the governing parameters. The color intensity corresponds to the concentration of species $u$, where brighter colors denote higher concentrations.}
+    \label{fig:turing_example}
+\end{figure}
+
+\subsection{Case Study: Sensitivity Analysis of Regularization Weight}
+\label{sec:sensitivity}
+
+We systematically investigated the impact of the hyperparameter $\lambda_{phy}$, which controls the trade-off between the data-driven objective and the steady-state physics constraint. Table \ref{tab:lambda_sensitivity} presents the performance of the L4 Maxpool architecture trained on 8,000 samples across varying magnitudes of $\lambda_{phy}$. The results reveal a distinct non-monotonic relationship, indicating that the strength of the physical regularization must be carefully tuned to achieve synergy within the PRESS framework.
+
+\begin{table}[h]
+    \centering
+    \caption{Sensitivity analysis of the \textbf{steady-state physics loss weight} $\lambda_{phy}$ for the $L=4$ Maxpool architecture trained on $N=8,000$ samples. The baseline model corresponds to $\lambda_{phy}=0$. We report NRMSE (parameter error) and PDE Residual (physical inconsistency). The improvement is calculated relative to the baseline.}
+    \label{tab:lambda_sensitivity}
+    \vspace{0.2cm}
+    \begin{tabular}{lcccc}
+        \toprule
+        \textbf{Loss Weight ($\lambda_{phy}$)} & \textbf{NRMSE} $\downarrow$ & \textbf{Imp.} & \textbf{PDE Residual} $\downarrow$ & \textbf{Imp.} \\
+        \midrule
+        0 (Baseline) & 0.0466 & - & 0.0698 & - \\
+        0.1 & 0.0573 & -22.96\% & 0.0205 & +70.56\% \\
+        0.01 & 0.0642 & -37.91\% & 0.0586 & +16.04\% \\
+        \textbf{0.001} & \textbf{0.0379} & \textbf{+18.54\%} & \textbf{0.0258} & \textbf{+62.97\%} \\
+        0.0001 & 0.0480 & -3.06\% & 0.0709 & -1.58\% \\
+        0.00001 & 0.0544 & -16.71\% & 0.1217 & -74.44\% \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\paragraph{Optimal Regularization.}
+The model achieves peak performance at $\lambda_{phy} = 0.001$, yielding a remarkable $18.54\%$ reduction in NRMSE compared to the pure data-driven baseline ($0.0379$ vs. $0.0466$). Crucially, this is accompanied by a massive $62.97\%$ reduction in PDE Residual ($0.0258$ vs. $0.0698$). In this regime, the physical loss effectively functions as a domain-specific regularizer, guiding the optimization landscape toward physically consistent parameter regions without dominating the gradient descent trajectory.
+
+\paragraph{Over-Regularization.}
+Conversely, setting $\lambda_{phy}$ too high ($\ge 0.01$) leads to an instructive trade-off. At $\lambda_{phy}=0.1$, the PDE Residual is minimized to its lowest value ($0.0205$, a $70.56\%$ improvement), yet the NRMSE degrades significantly ($-22.96\%$). This explicitly confirms that excessive weighting causes the optimization to prioritize satisfying the PDE constraint at the expense of accurately regressing the ground-truth parameters, effectively "overfitting" the physics loss.
+
+\paragraph{Under-Regularization.}
+When $\lambda_{phy}$ is insufficiently small ($\le 0.0001$), the regularization effect vanishes. The network behaves similarly to or worse than the unconstrained baseline (e.g., at $\lambda_{phy}=0.00001$, both NRMSE and Residual degrade), likely due to the introduction of uninformative gradients that fail to leverage the structural information encoded in the reaction-diffusion equations.
+
+These findings underscore that while physics-informed constraints are powerful, they require a balanced integration where physical laws complement, rather than override, the observational data.
+
+To qualitatively assess the model's performance, we visualize the inference results for one of the representative test sample from the $L=4$ Maxpool models trained on 8,000 samples. Figure \ref{fig:case_study_8000} compares the prediction quality between the purely data-driven baseline and the PRESS-regularized model ($\lambda_{phy}=0.001$).
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{8000_compare.png}
+    \caption{\textbf{Visual comparison of parameter inference.} 
+    The ground truth parameters are $a=0.0384, b=1.9097, c=4.5398, \delta=185.9997$. 
+    Left: The unconstrained baseline often predicts parameters that lead to distorted or structurally incorrect patterns. 
+    Right: The PRESS framework ($\lambda_{phy}=0.001$) recovers parameters that faithfully reproduce the ground truth morphology, demonstrating superior physical consistency.}
+    \label{fig:case_study_8000}
+\end{figure}
+
+
+\subsection{Metric Definitions}
+\label{sec:appendix_metrics}
+
+To rigorously evaluate the performance of PRESS, we employ two complementary metrics: one measuring the parameter inference accuracy in the normalized space, and the other quantifying the physical consistency of the predictions with respect to the governing laws.
+
+\paragraph{Normalized Root Mean Square Error (NRMSE).}
+Since the governing parameters span different orders of magnitude, we evaluate accuracy using the normalized parameter vectors. Let $\theta^{(i)} \in [0, 1]^4$ denote the ground-truth normalized parameter vector for the $i$-th test sample, and $\hat{\theta}^{(i)} \in [0, 1]^4$ denote the corresponding prediction by the network. The NRMSE is calculated as the average Euclidean distance over the test set of size $N_{test} = 4,000$:
+
+\begin{equation}
+    \text{NRMSE} = \frac{1}{N_{test}} \sum_{i=1}^{N_{test}} \left\| \hat{\theta}^{(i)} - \theta^{(i)} \right\|_2 = \frac{1}{N_{test}} \sum_{i=1}^{N_{test}} \sqrt{\sum_{j=1}^4 \left( \hat{\theta}^{(i)}_j - \theta^{(i)}_j \right)^2}
+\end{equation}
+
+This metric provides a direct measure of how close the inferred parameters are to the ground truth manifold in the normalized hypercube.
+
+\paragraph{Mean PDE Residual ($\mathcal{R}_{avg}$).}
+The PDE residual serves as a proxy for physical validity, independent of the ground truth labels. For a given sample $i$ with predicted parameters $\hat{\theta}^{(i)}$, we compute the steady-state residuals $\mathcal{R}_u$ and $\mathcal{R}_v$ (as defined in Eqs. 7-8) at each spatial location $\mathbf{x}$ on the discretized grid $\Omega$. The residual metric for a single sample, $\mathcal{L}_{res}^{(i)}$, is the mean squared residual over all $128 \times 128$ pixels:
+
+\begin{equation}
+    \mathcal{L}_{res}^{(i)} = \frac{1}{|\Omega|} \sum_{\mathbf{x} \in \Omega} \left( \mathcal{R}_u(\mathbf{x}; \hat{\theta}^{(i)})^2 + \mathcal{R}_v(\mathbf{x}; \hat{\theta}^{(i)})^2 \right)
+\end{equation}
+
+The reported \textbf{Mean PDE Residual} is then the average of this quantity across the entire test set:
+
+\begin{equation}
+    \mathcal{R}_{avg} = \frac{1}{N_{test}} \sum_{i=1}^{N_{test}} \mathcal{L}_{res}^{(i)}
+\end{equation}
+
+A lower $\mathcal{R}_{avg}$ indicates that the predicted parameters generate a reaction-diffusion field that is closer to the steady-state equilibrium condition required by the Gierer-Meinhardt model.
+
+\subsection{Future Work}
+
+While this study demonstrates the efficacy of the PRESS framework for parameter discovery in the Gierer–Meinhardt model, several avenues for future research remain:
+
+\begin{itemize}
+
+\item \textbf{Application to Real Biological Data:} The current framework relies on high-fidelity synthetic data generated under controlled numerical conditions. A critical next step is to validate the model on experimental biological images, such as pigmentation patterns in zebrafish or skin textures. This will require addressing observational challenges such as non-uniform lighting, perspective distortion, and complex measurement noise. Furthermore, distinct from the Gaussian perturbations we employed solely to trigger symmetry breaking, the intrinsic stochastic fluctuations that initiate morphogenesis in real biological systems may follow non-Gaussian distributions.
+
+\item \textbf{Generalization to Other Reaction–Diffusion Systems:} We focused exclusively on the Gierer–Meinhardt model. Future work should assess the universality of PRESS by applying it to other classic Turing systems, such as the Schnakenberg, Gray–Scott, or FitzHugh–Nagumo models. Investigating whether the steady-state assumption remains sufficient for systems exhibiting complex or chaotic regimes would be particularly valuable.
+
+\item \textbf{Adaptive Balancing of Physical Constraints:} In our current implementation, the weight of the physical loss $\lambda_{phy}$ is treated as a fixed hyperparameter. This static approach may not be optimal throughout the entire training trajectory. Future work should explore adaptive curriculum learning strategies, where the influence of the physical constraint is dynamically adjusted based on the training stability or gradient norms. Systematically analyzing the optimal timing and proportion of injecting physical laws could provide a generalizable guideline for balancing data-driven fitting and physical consistency.
+
+\item \textbf{Complex Geometries and Boundary Conditions:} Our experiments utilized square domains with periodic boundary conditions to facilitate spectral data generation. However, biological pattern formation often occurs on irregular, non-periodic domains (e.g., limb buds or animal skins). Extending the framework to handle Dirichlet or Neumann boundary conditions, or adapting the architecture (e.g., using Graph Neural Networks or Physics-Informed DeepONets) to process patterns on non-Euclidean manifolds or 3D volumetric data, represents a significant direction for development.
+
+\end{itemize}
+
+\end{document}
